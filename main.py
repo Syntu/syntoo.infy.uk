@@ -6,10 +6,12 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-# Load environment variables
+# .env फाइल लोड गर्नुहोस्
 load_dotenv()
+
+# Environment Variables
 TOKEN = os.getenv("TELEGRAM_API_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Ensure .env has correct URL
 
 # Flask App Setup
 app = Flask(__name__)
@@ -60,15 +62,15 @@ async def handle_stock_symbol(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"Turnover: {data['Turnover']}"
         )
     else:
-        response = f"Symbol '{symbol}' not found. Symol Spelling हेरेर पुन: प्रयास गर्नुहोस, धन्यवाद"
+        response = f"Symbol '{symbol}' not found. Please check the spelling and try again."
     await update.message.reply_text(response, parse_mode="HTML")
 
-# Flask Route to Handle Webhook
+# Flask Route to Handle Webhook (POST method)
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.get_json()
-    update = Update.de_json(data, application.bot)
-    application.process_update(update)
+    data = request.get_json()  # Receive JSON data from Telegram
+    update = Update.de_json(data, application.bot)  # Parse the data
+    application.process_update(update)  # Process the update
     return "Webhook received!", 200
 
 @app.route("/")
@@ -81,9 +83,10 @@ if __name__ == "__main__":
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_stock_symbol))
 
-    # Set Webhook
-    application.bot.set_webhook(url="https://nepsetg1.onrender.com/webhook")
+    # Set Webhook (use the .env file value for the URL)
+    print(f"Setting webhook to {WEBHOOK_URL}/webhook...")
+    application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
     print(f"Webhook set to: {WEBHOOK_URL}/webhook")
 
-    # Run Flask App
+    # Start Flask App
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
