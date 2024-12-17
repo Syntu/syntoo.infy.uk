@@ -4,14 +4,10 @@ from bs4 import BeautifulSoup
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ParseMode
-from flask import Flask
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-
-# Flask app setup
-app = Flask(__name__)
 
 # Function to fetch stock data
 def fetch_stock_data_by_symbol(symbol):
@@ -110,6 +106,3 @@ if __name__ == "__main__":
     # Start polling
     print("Starting polling...")
     application.run_polling()
-
-    # Flask app to verify the server
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
