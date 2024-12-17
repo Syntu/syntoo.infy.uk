@@ -82,7 +82,7 @@ if __name__ == "__main__":
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_stock_symbol))
 
     # Set Webhook
-    application.bot.set_webhook(url=WEBHOOK_URL + "/webhook")
+    application.bot.set_webhook(url="https://nepsetg1.onrender.com/webhook")
     print(f"Webhook set to: {WEBHOOK_URL}/webhook")
 
     # Run Flask App
