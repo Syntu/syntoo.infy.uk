@@ -1,56 +1,72 @@
 import os
 import requests
 from bs4 import BeautifulSoup
-from flask import Flask, request
-from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.constants import ParseMode
+from flask import Flask
+from dotenv import load_dotenv
 
-# .env फाइल लोड गर्नुहोस्
+# Load environment variables
 load_dotenv()
 
-# Environment Variables
-TOKEN = os.getenv("TELEGRAM_API_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Ensure .env has correct URL
-
-# Flask App Setup
+# Flask app setup
 app = Flask(__name__)
 
-# Telegram Application Setup
-application = ApplicationBuilder().token(TOKEN).build()
-
-# Function to Fetch Stock Data
+# Function to fetch stock data
 def fetch_stock_data_by_symbol(symbol):
     url = "https://www.sharesansar.com/today-share-price"
     response = requests.get(url)
-    soup = BeautifulSoup(response.text, "html.parser")
-    table = soup.find("table")
-    rows = table.find_all("tr")[1:]
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    table = soup.find('table')
+    rows = table.find_all('tr')[1:]
 
     for row in rows:
-        cols = row.find_all("td")
+        cols = row.find_all('td')
         row_symbol = cols[1].text.strip()
+
         if row_symbol.upper() == symbol.upper():
+            day_high = cols[4].text.strip()
+            day_low = cols[5].text.strip()
+            closing_price = cols[6].text.strip()
+            change_percent = cols[14].text.strip()
+            volume = cols[8].text.strip()
+            turnover = cols[10].text.strip()
+
+            # Handle color for change percentage
+            if "-" in change_percent:
+                change_percent = f"<b>{change_percent}%</b>"  # Red
+            elif "+" in change_percent:
+                change_percent = f"<b>{change_percent}%</b>"  # Green
+            else:
+                change_percent = f"<b>{change_percent}%</b>"
+
             return {
-                "Symbol": symbol,
-                "Day High": cols[4].text.strip(),
-                "Day Low": cols[5].text.strip(),
-                "Closing Price": cols[6].text.strip(),
-                "Change Percent": cols[14].text.strip(),
-                "Volume": cols[8].text.strip(),
-                "Turnover": cols[10].text.strip(),
+                'Symbol': symbol,
+                'Day High': day_high,
+                'Day Low': day_low,
+                'Closing Price': closing_price,
+                'Change Percent': change_percent,
+                'Volume': volume,
+                'Turnover': turnover
             }
     return None
 
-# Telegram Handlers
+# Start command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Welcome to Syntu's NEPSE Bot!\nSend a stock symbol (e.g., NABIL, SCB) to get stock details."
+    welcome_message = (
+        "Welcome to Syntu's NEPSE BOT\n"
+        "के को डाटा चाहियो? कृपया स्टकको सिम्बोल दिनुहोस्।\n"
+        "उदाहरण: SHINE, SCB ,SWBBL, SHPC"
     )
+    await update.message.reply_text(welcome_message)
 
+# Default handler for stock symbol
 async def handle_stock_symbol(update: Update, context: ContextTypes.DEFAULT_TYPE):
     symbol = update.message.text.strip().upper()
     data = fetch_stock_data_by_symbol(symbol)
+
     if data:
         response = (
             f"Stock Data for <b>{data['Symbol']}</b>:\n\n"
@@ -62,31 +78,23 @@ async def handle_stock_symbol(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"Turnover: {data['Turnover']}"
         )
     else:
-        response = f"Symbol '{symbol}' not found. Please check the spelling and try again."
-    await update.message.reply_text(response, parse_mode="HTML")
+        response = f"Symbol '{symbol}' कतै कारोबार बन्द त भएको छैन ? कि Symbol को Spelling मिलेन ? पुन:प्रयास गर्नुस"
+    await update.message.reply_text(response, parse_mode=ParseMode.HTML)
 
-# Flask Route to Handle Webhook (POST method)
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.get_json()  # Receive JSON data from Telegram
-    update = Update.de_json(data, application.bot)  # Parse the data
-    application.process_update(update)  # Process the update
-    return "Webhook received!", 200
-
-@app.route("/")
-def home():
-    return "Flask App is Running and Webhook is set!"
-
-# Main Function
+# Main function to set up the bot and run polling
 if __name__ == "__main__":
-    # Add Handlers
+    TOKEN = os.getenv("TELEGRAM_API_KEY")
+
+    # Set up Telegram bot application
+    application = ApplicationBuilder().token(TOKEN).build()
+
+    # Add handlers to the application
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_stock_symbol))
 
-    # Set Webhook (use the .env file value for the URL)
-    print(f"Setting webhook to {WEBHOOK_URL}/webhook...")
-    application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook")
-    print(f"Webhook set to: {WEBHOOK_URL}/webhook")
+    # Start polling
+    print("Starting polling...")
+    application.run_polling()
 
-    # Start Flask App
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
+    # Flask app to verify the server
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
