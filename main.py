@@ -3,7 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from flask import Flask, request
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 from telegram.constants import ParseMode
 from dotenv import load_dotenv
 
@@ -12,6 +12,9 @@ load_dotenv()
 
 # Flask app सेटअप
 app = Flask(__name__)
+
+# Telegram Application Instance
+application = None  # Define application globally for accessibility
 
 # Stock data fetching function
 def fetch_stock_data_by_symbol(symbol):
@@ -60,16 +63,16 @@ async def handle_stock_symbol(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"Turnover: {data['Turnover']}"
         )
     else:
-        response = f"Symbol '{symbol}' ल्या फेला परेन त हौ😂, Symbol को Spelling चेक गरेरर, पुनः  प्रयास गर्नुहोस्।"
+        response = f"Symbol '{symbol}' मिलेन, ल्या के पो बिग्य्रो ? 😂 Symbol चेक गरेर कृपया पुन: प्रयास गर्नुहोस्।"
 
     await update.message.reply_text(response, parse_mode=ParseMode.HTML)
 
-# Flask Route to Set Webhook
+# Flask Route to Handle Webhook
 @app.route('/webhook', methods=['POST'])
-async def webhook():
+def webhook():
     data = request.get_json()
-    update = Update.de_json(data, bot)
-    await application.process_update(update)
+    update = Update.de_json(data, application.bot)  # Parse incoming update data
+    application.process_update(update)  # Process the update synchronously
     return "Webhook received!", 200
 
 @app.route('/')
@@ -85,8 +88,15 @@ if __name__ == '__main__':
     # Telegram Bot Setup
     application = ApplicationBuilder().token(TOKEN).build()
     
+    # Add Handlers
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(None, handle_stock_symbol))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_stock_symbol))
+
+    # Set Webhook
+    print("Setting Webhook...")
+    application.bot.set_webhook(url=WEBHOOK_URL + "/webhook")
+    print(f"Webhook set to: {WEBHOOK_URL}/webhook")
 
     # Start Flask App
+    print("Starting Flask Server...")
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
