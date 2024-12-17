@@ -66,7 +66,7 @@ def fetch_stock_data_by_symbol(symbol):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_message = (
         "Welcome to Syntu's NEPSE BOT\n"
-        "के को डाटा चाहियो? कृपया स्टकको सिम्बोल दिनुहोस्।\n"
+        "कृपया स्टकको सिम्बोल दिनुहोस्।\n"
         "उदाहरण: SHINE, SCB, SWBBL, SHPC"
     )
     await update.message.reply_text(welcome_message)
@@ -89,7 +89,7 @@ async def handle_stock_symbol(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"Turnover: {data['Turnover']}"
         )
     else:
-        response = f"Symbol '{symbol}' कतै कारोबार बन्द त भएको छैन ? कि Symbol को Spelling मिलेन ? पुन:प्रयास गर्नुस"
+        response = f"Symbol '{symbol}' लौ जा, फेला परेन त 🤗🤗, कि Symbol को Spelling मिलेन ? फेरि Try मार्नुस।"
     await update.message.reply_text(response, parse_mode=ParseMode.HTML)
 
 # Main function to set up the bot and run polling
