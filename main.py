@@ -27,10 +27,12 @@ def fetch_stock_data_by_symbol(symbol):
         row_symbol = cols[1].text.strip()
 
         if row_symbol.upper() == symbol.upper():
+            ltp = cols[6].text.strip()  # Last Traded Price (LTP)
+            change_percent = cols[14].text.strip()
             day_high = cols[4].text.strip()
             day_low = cols[5].text.strip()
-            closing_price = cols[6].text.strip()
-            change_percent = cols[14].text.strip()
+            week_52_high = cols[19].text.strip()  # 52 Week High from Table 19
+            week_52_low = cols[20].text.strip()   # 52 Week Low from Table 20
             volume = cols[8].text.strip()
             turnover = cols[10].text.strip()
 
@@ -44,10 +46,12 @@ def fetch_stock_data_by_symbol(symbol):
 
             return {
                 'Symbol': symbol,
+                'LTP': ltp,
+                'Change Percent': change_percent,
                 'Day High': day_high,
                 'Day Low': day_low,
-                'Closing Price': closing_price,
-                'Change Percent': change_percent,
+                '52 Week High': week_52_high,
+                '52 Week Low': week_52_low,
                 'Volume': volume,
                 'Turnover': turnover
             }
@@ -70,10 +74,12 @@ async def handle_stock_symbol(update: Update, context: ContextTypes.DEFAULT_TYPE
     if data:
         response = (
             f"Stock Data for <b>{data['Symbol']}</b>:\n\n"
+            f"LTP: {data['LTP']}\n"
+            f"Change Percent: {data['Change Percent']}\n"
             f"Day High: {data['Day High']}\n"
             f"Day Low: {data['Day Low']}\n"
-            f"Closing Price: {data['Closing Price']}\n"
-            f"Change Percent: {data['Change Percent']}\n"
+            f"52 Week High: {data['52 Week High']}\n"
+            f"52 Week Low: {data['52 Week Low']}\n"
             f"Volume: {data['Volume']}\n"
             f"Turnover: {data['Turnover']}"
         )
