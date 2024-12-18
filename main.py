@@ -108,4 +108,4 @@ if __name__ == "__main__":
 
     # Start polling
     print("Starting polling...")
-    application.run_polling()
+    application.run_polling()  # Ensure your app is running here and will continue to listen for messages
