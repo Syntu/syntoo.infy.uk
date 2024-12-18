@@ -90,7 +90,9 @@ async def handle_stock_symbol(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
     else:
         response = f"Symbol '{symbol}'
-        लौ जा, फेला परेन त 🤗🤗, कि Symbol को Spelling मिलेन ? फेरि Try मार्नुस।"
+        लौ जा, फेला परेन त 🤗🤗।
+        कि Symbol को Spelling मिलेन ?
+        अझै Try गर्नुस।"
     await update.message.reply_text(response, parse_mode=ParseMode.HTML)
 
 # Main function to set up the bot and run polling
