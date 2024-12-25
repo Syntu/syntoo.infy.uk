@@ -142,7 +142,7 @@ scheduler = BackgroundScheduler(timezone="Asia/Kathmandu")
 
 # Create triggers
 weekday_trigger_morning = CronTrigger(day_of_week="sun-thu", hour="10-14", minute="*/15")
-weekday_trigger_afternoon = CronTrigger(day_of_week="sun-thu", hour=15, minute="0-59/15")
+weekday_trigger_afternoon = CronTrigger(day_of_week="sun-thu", hour=15, minute="*/15")
 
 # Add jobs to scheduler
 scheduler.add_job(refresh_data, weekday_trigger_morning)
