@@ -165,14 +165,14 @@ def generate_html(main_table):
                 position: sticky;
                 left: 0;
                 z-index: 3;
-                background-color: #8B4513; /* Match the header background color */
+                background-color: #FFC0CB; /* Pink background for symbol column */
             }}
             td.symbol {{
                 position: -webkit-sticky;
                 position: sticky;
                 left: 0;
                 z-index: 1;
-                background-color: inherit;
+                background-color: #FFC0CB; /* Pink background for symbol column */
             }}
             .footer {{
                 text-align: right;
@@ -196,12 +196,13 @@ def generate_html(main_table):
             }}
             .search-container {{
                 text-align: center;
-                margin-bottom: 20px;
+                margin-bottom: 10px;
             }}
             .search-container input {{
-                width: 300px;
-                padding: 10px;
-                font-size: 16px;
+                width: 200px;
+                padding: 5px;
+                font-size: 14px;
+                margin-bottom: 10px;
             }}
             @media (max-width: 768px) {{
                 table {{
@@ -336,7 +337,7 @@ def generate_html(main_table):
             "light-green" if float(row["Change%"]) > 0 else "light-blue")
         html += f"""
             <tr onclick="highlightRow(this)">
-                <td>{row["SN"]}</td><td class="symbol {change_class}">{row["Symbol"]}</td><td>{row["LTP"]}</td>
+                <td>{row["SN"]}</td><td class="symbol">{row["Symbol"]}</td><td>{row["LTP"]}</td>
                 <td class="{change_class}">{row["Change%"]}</td><td>{row["Day High"]}</td>
                 <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
                 <td>{row["Volume"]}</td><td>{row["Turnover"]}</td>
