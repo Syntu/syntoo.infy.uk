@@ -165,14 +165,14 @@ def generate_html(main_table):
                 position: sticky;
                 left: 0;
                 z-index: 3;
-                background-color: #FFC0CB; /* Pink background for symbol column */
+                background-color: #F0FFF0; /* Pink background for symbol column */
             }}
             td.symbol {{
                 position: -webkit-sticky;
                 position: sticky;
                 left: 0;
                 z-index: 1;
-                background-color: #FFC0CB; /* Pink background for symbol column */
+                background-color: #F0FFF0; /* Pink background for symbol column */
             }}
             .footer {{
                 text-align: right;
