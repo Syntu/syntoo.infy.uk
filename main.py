@@ -401,7 +401,7 @@ def refresh_data():
 scheduler = BackgroundScheduler()
 
 # Create trigger for Sunday to Thursday from 10:45 to 15:15 every 15 minutes
-weekday_trigger = CronTrigger(day_of_week='sun-thu', hour='10-15', minute='0-59/15')
+weekday_trigger = CronTrigger(day_of_week='sun-thu', hour='10-14', minute='0,15,30,45') | CronTrigger(day_of_week='sun-thu', hour='15', minute='0,15')
 
 # Create trigger for Thursday at 15:15
 thursday_trigger = CronTrigger(day_of_week='thu', hour='15', minute='15')
