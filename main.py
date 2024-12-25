@@ -152,7 +152,7 @@ def generate_html(main_table):
                 background-color: #FFCCCB;
             }}
             .light-green {{
-                background-color: #32CD32;
+                background-color: #D4EDDA;
             }}
             .light-blue {{
                 background-color: #CCE5FF;
@@ -199,9 +199,9 @@ def generate_html(main_table):
                 margin-bottom: 10px;
             }}
             .search-container input {{
-                width: 100px;
+                width: 200px;
                 padding: 5px;
-                font-size: 12px;
+                font-size: 14px;
                 margin-bottom: 10px;
             }}
             @media (max-width: 768px) {{
@@ -361,7 +361,7 @@ def generate_html(main_table):
             "light-green" if float(row["Change%"]) > 0 else "light-blue")
         html += f"""
             <tr onclick="highlightRow(this)">
-                <td>{row["SN"]}</td><td class="symbol">{row["Symbol"]}</td><td>{row["LTP"]}</td>
+                <td>{row["SN"]}</td><td class="symbol {change_class}">{row["Symbol"]}</td><td>{row["LTP"]}</td>
                 <td class="{change_class}">{row["Change%"]}</td><td>{row["Day High"]}</td>
                 <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
                 <td>{row["Volume"]}</td><td>{row["Turnover"]}</td>
@@ -385,7 +385,7 @@ def upload_to_ftp(html_content):
         f.write(html_content)
     with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
         ftp.cwd("/htdocs")
-        with open("index.html", "rb") as f:
+        with open("index.html", "rb") as f):
             ftp.storbinary("STOR index.html", f)
 
 # Refresh Data
