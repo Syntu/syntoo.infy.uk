@@ -398,17 +398,17 @@ def refresh_data():
     upload_to_ftp(html_content)
 
 # Scheduler
-scheduler = BackgroundScheduler()
+scheduler = BackgroundScheduler(timezone="Asia/Kathmandu")
 
 # Create trigger for Sunday to Thursday from 10:45 to 15:15 every 15 minutes
-weekday_trigger = CronTrigger(day_of_week='sun-thu', hour='10-14', minute='0,15,30,45') | CronTrigger(day_of_week='sun-thu', hour='15', minute='0,15')
+weekday_trigger = CronTrigger(day_of_week='sun-thu', hour='10-14', minute='*/15') | CronTrigger(day_of_week='sun-thu', hour='15', minute='0-14/15')
 
 # Create trigger for Thursday at 15:15
 thursday_trigger = CronTrigger(day_of_week='thu', hour='15', minute='15')
 
 # Add jobs to scheduler
-scheduler.add_job(refresh_data, weekday_trigger)
-scheduler.add_job(refresh_data, thursday_trigger)
+scheduler.add_job(refresh_data, trigger=weekday_trigger)
+scheduler.add_job(refresh_data, trigger=thursday_trigger)
 
 scheduler.start()
 
