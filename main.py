@@ -1,6 +1,7 @@
 import os
 import ftplib
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
 from datetime import datetime
 import requests
@@ -395,3 +396,25 @@ def refresh_data():
     merged_data = merge_data(live_data, today_data)
     html_content = generate_html(merged_data)
     upload_to_ftp(html_content)
+
+# Scheduler
+scheduler = BackgroundScheduler()
+
+# Create trigger for Sunday to Thursday from 10:45 to 15:15 every 15 minutes
+weekday_trigger = CronTrigger(day_of_week='sun-thu', hour='10-15', minute='0-59/15')
+
+# Create trigger for Thursday at 15:15
+thursday_trigger = CronTrigger(day_of_week='thu', hour='15', minute='15')
+
+# Add jobs to scheduler
+scheduler.add_job(refresh_data, weekday_trigger)
+scheduler.add_job(refresh_data, thursday_trigger)
+
+scheduler.start()
+
+# Initial Data Refresh
+refresh_data()
+
+# Keep Running
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=PORT)
