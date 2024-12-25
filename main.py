@@ -152,7 +152,7 @@ def generate_html(main_table):
                 background-color: #FFCCCB;
             }}
             .light-green {{
-                background-color: #D4EDDA;
+                background-color: #32CD32;
             }}
             .light-blue {{
                 background-color: #CCE5FF;
@@ -165,14 +165,14 @@ def generate_html(main_table):
                 position: sticky;
                 left: 0;
                 z-index: 3;
-                background-color: #F0FFF0; /* Pink background for symbol column */
+                background-color: #8B4513; /* Match the header background color */
             }}
             td.symbol {{
                 position: -webkit-sticky;
                 position: sticky;
                 left: 0;
                 z-index: 1;
-                background-color: #F0FFF0; /* Pink background for symbol column */
+                background-color: inherit;
             }}
             .footer {{
                 text-align: right;
@@ -199,9 +199,9 @@ def generate_html(main_table):
                 margin-bottom: 10px;
             }}
             .search-container input {{
-                width: 200px;
+                width: 100px;
                 padding: 5px;
-                font-size: 14px;
+                font-size: 12px;
                 margin-bottom: 10px;
             }}
             @media (max-width: 768px) {{
@@ -297,6 +297,30 @@ def generate_html(main_table):
                     }}
                 }}
             }}
+
+            // Function to change background color of Symbol column based on Change%
+            function updateSymbolColors() {{
+                var table = document.getElementById("nepseTable");
+                var rows = table.getElementsByTagName("tr");
+                for (var i = 1; i < rows.length; i++) {{
+                    var changeCell = rows[i].getElementsByTagName("td")[3];
+                    var symbolCell = rows[i].getElementsByTagName("td")[1];
+                    if (changeCell) {{
+                        var changeValue = parseFloat(changeCell.innerText);
+                        if (changeValue < 0) {{
+                            symbolCell.style.backgroundColor = "#FFCCCB"; // Light red
+                        }} else if (changeValue > 0) {{
+                            symbolCell.style.backgroundColor = "#D4EDDA"; // Light green
+                        }} else {{
+                            symbolCell.style.backgroundColor = "#CCE5FF"; // Light blue
+                        }}
+                    }}
+                }}
+            }}
+
+            window.onload = function() {{
+                updateSymbolColors();
+            }};
         </script>
     </head>
     <body>
