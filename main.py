@@ -215,9 +215,9 @@ def generate_html(main_table):
                 margin: 20px 0;
             }}
             .search-box input {{
-                width: 100px;
+                width: 300px;
                 padding: 10px;
-                font-size: 10px;
+                font-size: 16px;
             }}
         </style>
         <script>
