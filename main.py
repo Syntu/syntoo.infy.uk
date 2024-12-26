@@ -1,9 +1,8 @@
 import os
 import ftplib
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
-from datetime import datetime
+from datetime import datetime, time
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -92,30 +91,272 @@ def merge_data(live_data, today_data):
 def generate_html(main_table):
     updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
     html = f"""
-    <html>
-        <head><title>NEPSE Live Data</title></head>
-        <body>
-            <h1>NEPSE Live Data</h1>
-            <p>Updated: {updated_time}</p>
-            <table border="1">
-                <tr>
-                    <th>SN</th><th>Symbol</th><th>LTP</th><th>Change%</th><th>Day High</th>
-                    <th>Day Low</th><th>Previous Close</th><th>Volume</th><th>Turnover</th>
-                    <th>52 Week High</th><th>52 Week Low</th><th>Down From High (%)</th><th>Up From Low (%)</th>
-                </tr>
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>NEPSE Live Data</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; }}
+            h1 {{
+                text-align: center;
+                font-size: 40px;
+                font-weight: bold;
+                margin-top: 20px;
+            }}
+            h2 {{
+                text-align: center;
+                font-size: 14px;
+                margin-bottom: 20px;
+            }}
+            .table-container {{
+                margin: 0 auto;
+                width: 95%;
+                overflow-x: auto;
+                overflow-y: auto;
+                height: 600px; /* Adjust as needed */
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+                font-size: 14px;
+            }}
+            th, td {{
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: center;
+            }}
+            th {{
+                background-color: #8B4513;
+                color: white;
+                position: sticky;
+                top: 0;
+                z-index: 2;
+                cursor: pointer;
+                white-space: nowrap;
+            }}
+            th.arrow::after {{
+                content: '\\25B2'; /* Up arrow */
+                float: right;
+                margin-left: 5px;
+            }}
+            th.arrow.desc::after {{
+                content: '\\25BC'; /* Down arrow */
+            }}
+            tr:nth-child(even) {{
+                background-color: #f9f9f9;
+            }}
+            .light-red {{
+                background-color: #FFCCCB;
+            }}
+            .light-green {{
+                background-color: #D4EDDA;
+            }}
+            .light-blue {{
+                background-color: #CCE5FF;
+            }}
+            .highlight {{
+                background-color: yellow !important;
+            }}
+            th.symbol {{
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0;
+                z-index: 3;
+                background-color: #8B4513; /* Match the header background color */
+            }}
+            td.symbol {{
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0;
+                z-index: 1;
+                background-color: inherit;
+            }}
+            .footer {{
+                text-align: right;
+                padding: 10px;
+                font-size: 12px;
+                color: gray;
+            }}
+            .footer a {{
+                color: inherit;
+                text-decoration: none;
+            }}
+            .updated-time {{
+                font-size: 14px;
+                margin-top: 10px;
+            }}
+            .left {{
+                float: left;
+            }}
+            .right {{
+                float: right;
+            }}
+            @media (max-width: 768px) {{
+                table {{
+                    font-size: 12px;
+                }}
+                th, td {{
+                    padding: 5px;
+                }}
+            }}
+            @media (max-width: 480px) {{
+                table {{
+                    font-size: 10px;
+                }}
+                th, td {{
+                    padding: 3px;
+                }}
+            }}
+            .search-box {{
+                text-align: center;
+                margin: 20px 0;
+            }}
+            .search-box input {{
+                width: 300px;
+                padding: 10px;
+                font-size: 16px;
+            }}
+        </style>
+        <script>
+            function sortTable(n) {{
+                var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+                table = document.getElementById("nepseTable");
+                switching = true;
+                dir = "asc";
+                var headers = table.getElementsByTagName("TH");
+                for (var j = 0; j < headers.length; j++) {{
+                    headers[j].classList.remove("arrow", "desc");
+                }}
+                headers[n].classList.add("arrow");
+                while (switching) {{
+                    switching = false;
+                    rows = table.rows;
+                    for (i = 1; i < (rows.length - 1); i++) {{
+                        shouldSwitch = false;
+                        x = rows[i].getElementsByTagName("TD")[n];
+                        y = rows[i + 1].getElementsByTagName("TD")[n];
+                        let xValue = parseFloat(x.innerHTML.replace(/,/g, ''));
+                        let yValue = parseFloat(y.innerHTML.replace(/,/g, ''));
+                        if (isNaN(xValue)) xValue = x.innerHTML.toLowerCase();
+                        if (isNaN(yValue)) yValue = y.innerHTML.toLowerCase();
+                        if (dir === "asc") {{
+                            if (xValue > yValue) {{
+                                shouldSwitch = true;
+                                break;
+                            }}
+                        }} else if (dir === "desc") {{
+                            if (xValue < yValue) {{
+                                shouldSwitch = true;
+                                break;
+                            }}
+                        }}
+                    }}
+                    if (shouldSwitch) {{
+                        rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                        switching = true;
+                        switchcount++;
+                    }} else {{
+                        if (switchcount === 0 && dir === "asc") {{
+                            dir = "desc";
+                            headers[n].classList.add("desc");
+                            switching = true;
+                        }}
+                    }}
+                }}
+            }}
+
+            // Function to highlight a row when a symbol is clicked
+            function highlightRow(row) {{
+                var rows = document.getElementById("nepseTable").rows;
+                for (var i = 1; i < rows.length; i++) {{
+                    rows[i].classList.remove("highlight");
+                }}
+                row.classList.add("highlight");
+            }}
+
+            // Function to filter the table based on search input
+            function filterTable() {{
+                var input, filter, table, tr, td, i, txtValue;
+                input = document.getElementById("searchInput");
+                filter = input.value.toUpperCase();
+                table = document.getElementById("nepseTable");
+                tr = table.getElementsByTagName("tr");
+                for (i = 1; i < tr.length; i++) {{
+                    td = tr[i].getElementsByTagName("td")[1];  // Assuming the symbol is in the second column
+                    if (td) {{
+                        txtValue = td.textContent || td.innerText;
+                        if (txtValue.toUpperCase().indexOf(filter) > -1) {{
+                            tr[i].style.display = "";
+                        }} else {{
+                            tr[i].style.display = "none";
+                        }}
+                    }}
+                }}
+            }}
+        </script>
+    </head>
+    <body>
+        <h1>NEPSE Live Data</h1>
+        <h2>Welcome 🙏 to my Nepse Data website</h2>
+        <div class="updated-time">
+            <div class="left">Updated on: {updated_time}</div>
+            <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
+        </div>
+
+        <div class="search-box">
+            <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search for symbols..">
+        </div>
+
+        <div class="table-container">
+            <table id="nepseTable">
+                <thead>
+                    <tr>
+                        <th>SN</th>
+                        <th class="symbol" onclick="sortTable(1)">Symbol</th>
+                        <th onclick="sortTable(2)">LTP</th>
+                        <th onclick="sortTable(3)">Change%</th>
+                        <th onclick="sortTable(4)">Day High</th>
+                        <th onclick="sortTable(5)">Day Low</th>
+                        <th onclick="sortTable(6)">Previous Close</th>
+                        <th onclick="sortTable(7)">Volume</th>
+                        <th onclick="sortTable(8)">Turnover</th>
+                        <th onclick="sortTable(9)">52 Week High</th>
+                        <th onclick="sortTable(10)">52 Week Low</th>
+                        <th onclick="sortTable(11)">Down From High (%)</th>
+                        <th onclick="sortTable(12)">Up From Low (%)</th>
+                    </tr>
+                </thead>
+                <tbody>
     """
     for row in main_table:
+        change_class = "light-red" if float(row["Change%"]) < 0 else (
+            "light-green" if float(row["Change%"]) > 0 else "light-blue")
         html += f"""
-        <tr>
-            <td>{row["SN"]}</td><td>{row["Symbol"]}</td><td>{row["LTP"]}</td><td>{row["Change%"]}</td>
-            <td>{row["Day High"]}</td><td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
-            <td>{row["Volume"]}</td><td>{row["Turnover"]}</td><td>{row["52 Week High"]}</td>
-            <td>{row["52 Week Low"]}</td><td>{row["Down From High (%)"]}</td><td>{row["Up From Low (%)"]}</td>
-        </tr>
+            <tr onclick="highlightRow(this)">
+                <td>{row["SN"]}</td>
+                <td class="symbol {change_class}">{row["Symbol"]}</td>
+                <td>{row["LTP"]}</td>
+                <td class="{change_class}">{row["Change%"]}</td>
+                <td>{row["Day High"]}</td>
+                <td>{row["Day Low"]}</td>
+                <td>{row["Previous Close"]}</td>
+                <td>{row["Volume"]}</td>
+                <td>{row["Turnover"]}</td>
+                <td>{row["52 Week High"]}</td>
+                <td>{row["52 Week Low"]}</td>
+                <td>{row["Down From High (%)"]}</td>
+                <td>{row["Up From Low (%)"]}</td>
+            </tr>
         """
     html += """
-            </table>
-        </body>
+        </tbody>
+        </table>
+    </div>
+
+    </body>
     </html>
     """
     return html
@@ -138,17 +379,16 @@ def refresh_data():
     upload_to_ftp(html_content)
 
 # Scheduler
-scheduler = BackgroundScheduler(timezone="Asia/Kathmandu")
+def should_refresh():
+    now = datetime.now(timezone("Asia/Kathmandu"))
+    if now.weekday() >= 4:  # Friday and Saturday are holidays
+        return False
+    start_time = time(10, 30)
+    end_time = time(15, 15)
+    return start_time <= now.time() <= end_time
 
-# Create triggers
-weekday_trigger_morning = CronTrigger(day_of_week="sun-thu", hour="10-14", minute="*/15")
-weekday_trigger_afternoon = CronTrigger(day_of_week="sun-thu", hour=15, minute="*/15")
-
-# Add jobs to scheduler
-scheduler.add_job(refresh_data, weekday_trigger_morning)
-scheduler.add_job(refresh_data, weekday_trigger_afternoon)
-
-# Start the scheduler
+scheduler = BackgroundScheduler()
+scheduler.add_job(refresh_data, "interval", minutes=10, next_run_time=datetime.now())
 scheduler.start()
 
 # Initial Data Refresh
