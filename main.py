@@ -299,7 +299,7 @@ def generate_html(main_table):
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
         </div>
-        <input type="text" id="searchInput" onkeyup="searchTable()" placeholder="Search for symbols.." style="width: 10%; padding: 8px; margin-top: 12px; margin-bottom: 12px;">
+        <input type="text" id="searchInput" onkeyup="searchTable()" placeholder="Search for symbols.." style="width: 100%; padding: 8px; margin-top: 12px; margin-bottom: 12px;">
 
         <div class="table-container">
             <table id="nepseTable">
