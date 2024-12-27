@@ -1,20 +1,15 @@
 import os
-from datetime import datetime, time
 import ftplib
-import logging
-import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from pytz import timezone
+from datetime import datetime, time
+import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from flask import Flask
-from pytz import timezone
 
-# Initialize Flask app
 app = Flask(__name__)
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
 
 # Load environment variables
 load_dotenv()
@@ -28,59 +23,46 @@ last_data = None
 
 # Function to scrape live trading data
 def scrape_live_trading():
-    logging.info("Scraping live trading data...")
     url = "https://www.sharesansar.com/live-trading"
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, "html.parser")
-        rows = soup.find_all("tr")
-        data = []
-        for row in rows:
-            cells = row.find_all("td")
-            if len(cells) > 1:
-                data.append({
-                    "Symbol": cells[1].text.strip(),
-                    "LTP": cells[2].text.strip().replace(",", ""),
-                    "Change%": cells[4].text.strip(),
-                    "Day High": cells[6].text.strip().replace(",", ""),
-                    "Day Low": cells[7].text.strip().replace(",", ""),
-                    "Previous Close": cells[9].text.strip().replace(",", ""),
-                    "Volume": cells[8].text.strip().replace(",", "")
-                })
-        return data
-    except requests.RequestException as e:
-        logging.error(f"Error scraping live trading data: {e}")
-        return []
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, "html.parser")
+    rows = soup.find_all("tr")
+    data = []
+    for row in rows:
+        cells = row.find_all("td")
+        if len(cells) > 1:
+            data.append({
+                "Symbol": cells[1].text.strip(),
+                "LTP": cells[2].text.strip().replace(",", ""),
+                "Change%": cells[4].text.strip(),
+                "Day High": cells[6].text.strip().replace(",", ""),
+                "Day Low": cells[7].text.strip().replace(",", ""),
+                "Previous Close": cells[9].text.strip().replace(",", ""),
+                "Volume": cells[8].text.strip().replace(",", "")
+            })
+    return data
 
 # Function to scrape today's share price summary
 def scrape_today_share_price():
-    logging.info("Scraping today's share price data...")
     url = "https://www.sharesansar.com/today-share-price"
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, "html.parser")
-        rows = soup.find_all("tr")
-        data = []
-        for row in rows:
-            cells = row.find_all("td")
-            if len(cells) > 1:
-                data.append({
-                    "SN": cells[0].text.strip(),
-                    "Symbol": cells[1].text.strip(),
-                    "Turnover": cells[10].text.strip().replace(",", ""),
-                    "52 Week High": cells[19].text.strip().replace(",", ""),
-                    "52 Week Low": cells[20].text.strip().replace(",", "")
-                })
-        return data
-    except requests.RequestException as e:
-        logging.error(f"Error scraping today's share price data: {e}")
-        return []
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, "html.parser")
+    rows = soup.find_all("tr")
+    data = []
+    for row in rows:
+        cells = row.find_all("td")
+        if len(cells) > 1:
+            data.append({
+                "SN": cells[0].text.strip(),
+                "Symbol": cells[1].text.strip(),
+                "Turnover": cells[10].text.strip().replace(",", ""),
+                "52 Week High": cells[19].text.strip().replace(",", ""),
+                "52 Week Low": cells[20].text.strip().replace(",", "")
+            })
+    return data
 
 # Function to merge live and today's data
 def merge_data(live_data, today_data):
-    logging.info("Merging live and today's data...")
     merged = []
     today_dict = {item["Symbol"]: item for item in today_data}
     for live in live_data:
@@ -111,7 +93,6 @@ def merge_data(live_data, today_data):
 
 # Function to generate HTML
 def generate_html(main_table):
-    logging.info("Generating HTML...")
     updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
     html = f"""
     <!DOCTYPE html>
@@ -318,7 +299,7 @@ def generate_html(main_table):
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
         </div>
-        <input type="text" id="searchInput" onkeyup="searchTable()" placeholder="Search for symbols.." style="width: 100%; padding: 8px; margin-top: 12px; margin-bottom: 12px;">
+        <input type="text" id="searchInput" onkeyup="searchTable()" placeholder="Search for symbols.." style="width: 10%; padding: 8px; margin-top: 12px; margin-bottom: 12px;">
 
         <div class="table-container">
             <table id="nepseTable">
@@ -409,6 +390,8 @@ scheduler.add_job(refresh_data, CronTrigger(minute='*/10', hour='10-14', day_of_
 scheduler.add_job(refresh_data, CronTrigger(minute='0-10/10', hour='15', day_of_week='sun,mon,tue,wed,thu'))
 scheduler.start()
 
+# Initial Data Refresh
+refresh_data()
+
 if __name__ == "__main__":
-    refresh_data()
     app.run(host="0.0.0.0", port=PORT)
