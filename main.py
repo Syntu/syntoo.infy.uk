@@ -118,52 +118,235 @@ def generate_html(main_table):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>NEPSE Live Data</title>
         <style>
-            body {{ font-family: Arial, sans-serif; }}
-            table {{ width: 100%; border-collapse: collapse; }}
-            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: center; }}
-            th {{ background-color: #8B4513; color: white; }}
-            .light-red {{ background-color: #FFCCCB; }}
-            .light-green {{ background-color: #D4EDDA; }}
-            .light-blue {{ background-color: #CCE5FF; }}
-            .highlight {{ background-color: yellow; }}
-            .freeze-header {{ position: sticky; top: 0; background: white; z-index: 1000; }}
-            .freeze-column {{ position: sticky; left: 0; background: white; z-index: 1000; }}
-            .center {{ text-align: center; }}
-            input[type="text"] {{ width: 100%; padding: 8px; margin-top: 12px; margin-bottom: 12px; }}
+            body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; }}
+            h1 {{
+                text-align: center;
+                font-size: 40px;
+                font-weight: bold;
+                margin-top: 20px;
+            }}
+            h2 {{
+                text-align: center;
+                font-size: 14px;
+                margin-bottom: 20px;
+            }}
+            .table-container {{
+                margin: 0 auto;
+                width: 95%;
+                overflow-x: auto;
+                overflow-y: auto;
+                height: 600px; /* Adjust as needed */
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+                font-size: 14px;
+            }}
+            th, td {{
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: center;
+            }}
+            th {{
+                background-color: #8B4513;
+                color: white;
+                position: sticky;
+                top: 0;
+                z-index: 2;
+                cursor: pointer;
+                white-space: nowrap;
+            }}
+            th.arrow::after {{
+                content: '\\25B2'; /* Up arrow */
+                float: right;
+                margin-left: 5px;
+            }}
+            th.arrow.desc::after {{
+                content: '\\25BC'; /* Down arrow */
+            }}
+            tr:nth-child(even) {{
+                background-color: #f9f9f9;
+            }}
+            .light-red {{
+                background-color: #FFCCCB;
+            }}
+            .light-green {{
+                background-color: #D4EDDA;
+            }}
+            .light-blue {{
+                background-color: #CCE5FF;
+            }}
+            .highlight {{
+                background-color: yellow !important;
+            }}
+            th.symbol {{
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0;
+                z-index: 3;
+                background-color: #8B4513; /* Match the header background color */
+            }}
+            td.symbol {{
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0;
+                z-index: 1;
+                background-color: inherit;
+            }}
+            .footer {{
+                text-align: right;
+                padding: 10px;
+                font-size: 12px;
+                color: gray;
+            }}
+            .footer a {{
+                color: inherit;
+                text-decoration: none;
+            }}
+            .updated-time {{
+                font-size: 14px;
+                margin-top: 10px;
+            }}
+            .left {{
+                float: left;
+            }}
+            .right {{
+                float: right;
+            }}
+            @media (max-width: 768px) {{
+                table {{
+                    font-size: 12px;
+                }}
+                th, td {{
+                    padding: 5px;
+                }}
+            }}
+            @media (max-width: 480px) {{
+                table {{
+                    font-size: 10px;
+                }}
+                th, td {{
+                    padding: 3px;
+                }}
+            }}
         </style>
+        <script>
+            function sortTable(n) {{
+                var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+                table = document.getElementById("nepseTable");
+                switching = true;
+                dir = "asc";
+                var headers = table.getElementsByTagName("TH");
+                for (var j = 0; j < headers.length; j++) {{
+                    headers[j].classList.remove("arrow", "desc");
+                }}
+                headers[n].classList.add("arrow");
+                while (switching) {{
+                    switching = false;
+                    rows = table.rows;
+                    for (i = 1; i < (rows.length - 1); i++) {{
+                        shouldSwitch = false;
+                        x = rows[i].getElementsByTagName("TD")[n];
+                        y = rows[i + 1].getElementsByTagName("TD")[n];
+                        let xValue = parseFloat(x.innerHTML.replace(/,/g, ''));
+                        let yValue = parseFloat(y.innerHTML.replace(/,/g, ''));
+                        if (isNaN(xValue)) xValue = x.innerHTML.toLowerCase();
+                        if (isNaN(yValue)) yValue = y.innerHTML.toLowerCase();
+                        if (dir === "asc") {{
+                            if (xValue > yValue) {{
+                                shouldSwitch = true;
+                                break;
+                            }}
+                        }} else if (dir === "desc") {{
+                            if (xValue < yValue) {{
+                                shouldSwitch = true;
+                                break;
+                            }}
+                        }}
+                    }}
+                    if (shouldSwitch) {{
+                        rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                        switching = true;
+                        switchcount++;
+                    }} else {{
+                        if (switchcount === 0 && dir === "asc") {{
+                            dir = "desc";
+                            headers[n].classList.add("desc");
+                            switching = true;
+                        }}
+                    }}
+                }}
+            }}
+
+            // Function to highlight a row when a symbol is clicked
+            function highlightRow(row) {{
+                var rows = document.getElementById("nepseTable").rows;
+                for (var i = 1; i < rows.length; i++) {{
+                    rows[i].classList.remove("highlight");
+                }}
+                row.classList.add("highlight");
+            }}
+
+            function searchTable() {{
+                var input, filter, table, tr, td, i, txtValue;
+                input = document.getElementById("searchInput");
+                filter = input.value.toUpperCase();
+                table = document.getElementById("nepseTable");
+                tr = table.getElementsByTagName("tr");
+                for (i = 1; i < tr.length; i++) {{
+                    td = tr[i].getElementsByTagName("td")[1]; // Search in the Symbol column
+                    if (td) {{
+                        txtValue = td.textContent || td.innerText;
+                        if (txtValue.toUpperCase().indexOf(filter) > -1) {{
+                            tr[i].style.display = "";
+                        }} else {{
+                            tr[i].style.display = "none";
+                        }}
+                    }}
+                }}
+            }}
+        </script>
     </head>
     <body>
-        <h1 class="center" style="font-size: 2em;">Nepse Live Data</h1>
-        <h2 class="center">Welcome to my Nepal Stock Data Website</h2>
-        <h2>Updated on: {updated_time} <a href="#" style="float:right;">Developed By: Syntoo</a></h2>
-        <input type="text" id="searchInput" onkeyup="searchTable()" placeholder="Search for symbols..">
-        <table id="dataTable">
-            <thead>
-                <tr>
-                    <th class="freeze-header">SN</th>
-                    <th class="freeze-header">Symbol</th>
-                    <th class="freeze-header">LTP</th>
-                    <th class="freeze-header">Change%</th>
-                    <th class="freeze-header">Day High</th>
-                    <th class="freeze-header">Day Low</th>
-                    <th class="freeze-header">Previous Close</th>
-                    <th class="freeze-header">Volume</th>
-                    <th class="freeze-header">Turnover</th>
-                    <th class="freeze-header">52 Week High</th>
-                    <th class="freeze-header">52 Week Low</th>
-                </tr>
-            </thead>
-            <tbody>
+        <h1>NEPSE Live Data</h1>
+        <h2>Welcome 🙏 to my Nepse Data website</h2>
+        <div class="updated-time">
+            <div class="left">Updated on: {updated_time}</div>
+            <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
+        </div>
+        <input type="text" id="searchInput" onkeyup="searchTable()" placeholder="Search for symbols.." style="width: 100%; padding: 8px; margin-top: 12px; margin-bottom: 12px;">
+
+        <div class="table-container">
+            <table id="nepseTable">
+                <thead>
+                    <tr>
+                        <th>SN</th>
+                        <th class="symbol" onclick="sortTable(1)">Symbol</th>
+                        <th onclick="sortTable(2)">LTP</th>
+                        <th onclick="sortTable(3)">Change%</th>
+                        <th onclick="sortTable(4)">Day High</th>
+                        <th onclick="sortTable(5)">Day Low</th>
+                        <th onclick="sortTable(6)">Previous Close</th>
+                        <th onclick="sortTable(7)">Volume</th>
+                        <th onclick="sortTable(8)">Turnover</th>
+                        <th onclick="sortTable(9)">52 Week High</th>
+                        <th onclick="sortTable(10)">52 Week Low</th>
+                        <th onclick="sortTable(11)">Down From High (%)</th>
+                        <th onclick="sortTable(12)">Up From Low (%)</th>
+                    </tr>
+                </thead>
+                <tbody>
     """
     for row in main_table:
-        change = float(row["Change%"])
-        symbol_class = "light-red" if change < 0 else "light-green" if change > 0 else "light-blue"
+        change_class = "light-red" if float(row["Change%"]) < 0 else (
+            "light-green" if float(row["Change%"]) > 0 else "light-blue")
         html += f"""
             <tr onclick="highlightRow(this)">
                 <td>{row["SN"]}</td>
-                <td class="{symbol_class}">{row["Symbol"]}</td>
+                <td class="symbol {change_class}">{row["Symbol"]}</td>
                 <td>{row["LTP"]}</td>
-                <td class="{symbol_class}">{row["Change%"]}</td>
+                <td class="{change_class}">{row["Change%"]}</td>
                 <td>{row["Day High"]}</td>
                 <td>{row["Day Low"]}</td>
                 <td>{row["Previous Close"]}</td>
@@ -171,52 +354,14 @@ def generate_html(main_table):
                 <td>{row["Turnover"]}</td>
                 <td>{row["52 Week High"]}</td>
                 <td>{row["52 Week Low"]}</td>
+                <td>{row["Down From High (%)"]}</td>
+                <td>{row["Up From Low (%)"]}</td>
             </tr>
         """
     html += """
-            </tbody>
-        </table>
-        <script>
-            function searchTable() {
-                var input, filter, table, tr, td, i, txtValue;
-                input = document.getElementById("searchInput");
-                filter = input.value.toUpperCase();
-                table = document.getElementById("dataTable");
-                tr = table.getElementsByTagName("tr");
-                for (i = 1; i < tr.length; i++) {
-                    td = tr[i].getElementsByTagName("td")[1];
-                    if (td) {
-                        txtValue = td.textContent || td.innerText;
-                        if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                            tr[i].style.display = "";
-                        } else {
-                            tr[i].style.display = "none";
-                        }
-                    }
-                }
-            }
-
-            function highlightRow(row) {
-                var table = row.parentElement;
-                var rows = table.getElementsByTagName("tr");
-                for (var i = 0; i < rows.length; i++) {
-                    rows[i].classList.remove("highlight");
-                }
-                row.classList.add("highlight");
-            }
-
-            window.onscroll = function() {
-                var header = document.getElementById("dataTable").getElementsByTagName("thead")[0];
-                var ths = header.getElementsByTagName("th");
-                for (var i = 0; i < ths.length; i++) {
-                    ths[i].classList.add("freeze-header");
-                }
-                var firstColumn = document.getElementById("dataTable").getElementsByTagName("tbody")[0].getElementsByTagName("tr");
-                for (var j = 0; j < firstColumn.length; j++) {
-                    firstColumn[j].getElementsByTagName("td")[0].classList.add("freeze-column");
-                }
-            }
-        </script>
+                </tbody>
+            </table>
+        </div>
     </body>
     </html>
     """
