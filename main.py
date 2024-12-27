@@ -4,6 +4,7 @@ import ftplib
 import logging
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from flask import Flask
@@ -253,7 +254,7 @@ def refresh_data():
 
 # Scheduler
 scheduler = BackgroundScheduler()
-scheduler.add_job(refresh_data, "interval", minutes=10, start_date='2024-12-27 10:30:00', end_date='2024-12-27 15:10:00', days_of_week='sun,mon,tue,wed,thu')
+scheduler.add_job(refresh_data, CronTrigger(minute='*/10', hour='10-15', day_of_week='sun-thu'))
 scheduler.start()
 
 if __name__ == "__main__":
