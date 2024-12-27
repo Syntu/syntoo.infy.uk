@@ -23,6 +23,9 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
+# Global variable to store the last data fetched at 15:10
+last_data = None
+
 # Function to scrape live trading data
 def scrape_live_trading():
     logging.info("Scraping live trading data...")
@@ -383,6 +386,7 @@ def upload_to_ftp(html_content):
 
 # Refresh Data
 def refresh_data():
+    global last_data
     logging.info("Refreshing data...")
     current_time = datetime.now(timezone("Asia/Kathmandu")).time()
     start_time = time(10, 30)
@@ -391,9 +395,11 @@ def refresh_data():
         live_data = scrape_live_trading()
         today_data = scrape_today_share_price()
         merged_data = merge_data(live_data, today_data)
+        if current_time == end_time:
+            last_data = merged_data  # Store the last data at 15:10
     else:
         logging.info("Outside trading hours. Using last available data.")
-        merged_data = []
+        merged_data = last_data if last_data else []
     html_content = generate_html(merged_data)
     upload_to_ftp(html_content)
 
