@@ -124,25 +124,32 @@ def generate_html(main_table):
             .light-red {{ background-color: #FFCCCB; }}
             .light-green {{ background-color: #D4EDDA; }}
             .light-blue {{ background-color: #CCE5FF; }}
+            .highlight {{ background-color: yellow; }}
+            .freeze-header {{ position: sticky; top: 0; background: white; }}
+            .freeze-column {{ position: sticky; left: 0; background: white; }}
+            .center {{ text-align: center; }}
+            input[type="text"] {{ width: 100%; padding: 8px; margin-top: 12px; margin-bottom: 12px; }}
         </style>
     </head>
     <body>
-        <h1>NEPSE Live Data</h1>
-        <h2>Updated on: {updated_time}</h2>
-        <table>
+        <h1 class="center">NEPSE Live Data</h1>
+        <h2 class="center">Welcome to my Nepal Stock Data Website</h2>
+        <h2>Updated on: {updated_time} <a href="#" style="float:right;">Developed By: Syntoo</a></h2>
+        <input type="text" id="searchInput" onkeyup="searchTable()" placeholder="Search for symbols..">
+        <table id="dataTable">
             <thead>
                 <tr>
-                    <th>SN</th>
-                    <th>Symbol</th>
-                    <th>LTP</th>
-                    <th>Change%</th>
-                    <th>Day High</th>
-                    <th>Day Low</th>
-                    <th>Previous Close</th>
-                    <th>Volume</th>
-                    <th>Turnover</th>
-                    <th>52 Week High</th>
-                    <th>52 Week Low</th>
+                    <th class="freeze-header">SN</th>
+                    <th class="freeze-header">Symbol</th>
+                    <th class="freeze-header">LTP</th>
+                    <th class="freeze-header">Change%</th>
+                    <th class="freeze-header">Day High</th>
+                    <th class="freeze-header">Day Low</th>
+                    <th class="freeze-header">Previous Close</th>
+                    <th class="freeze-header">Volume</th>
+                    <th class="freeze-header">Turnover</th>
+                    <th class="freeze-header">52 Week High</th>
+                    <th class="freeze-header">52 Week Low</th>
                 </tr>
             </thead>
             <tbody>
@@ -151,7 +158,7 @@ def generate_html(main_table):
         change = float(row["Change%"])
         symbol_class = "light-red" if change < 0 else "light-green" if change > 0 else "light-blue"
         html += f"""
-            <tr>
+            <tr onclick="highlightRow(this)">
                 <td>{row["SN"]}</td>
                 <td class="{symbol_class}">{row["Symbol"]}</td>
                 <td>{row["LTP"]}</td>
@@ -168,6 +175,47 @@ def generate_html(main_table):
     html += """
             </tbody>
         </table>
+        <script>
+            function searchTable() {
+                var input, filter, table, tr, td, i, txtValue;
+                input = document.getElementById("searchInput");
+                filter = input.value.toUpperCase();
+                table = document.getElementById("dataTable");
+                tr = table.getElementsByTagName("tr");
+                for (i = 1; i < tr.length; i++) {
+                    td = tr[i].getElementsByTagName("td")[1];
+                    if (td) {
+                        txtValue = td.textContent || td.innerText;
+                        if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                            tr[i].style.display = "";
+                        } else {
+                            tr[i].style.display = "none";
+                        }
+                    }
+                }
+            }
+
+            function highlightRow(row) {
+                var table = row.parentElement;
+                var rows = table.getElementsByTagName("tr");
+                for (var i = 0; i < rows.length; i++) {
+                    rows[i].classList.remove("highlight");
+                }
+                row.classList.add("highlight");
+            }
+
+            window.onscroll = function() {
+                var header = document.getElementById("dataTable").getElementsByTagName("thead")[0];
+                var ths = header.getElementsByTagName("th");
+                for (var i = 0; i < ths.length; i++) {
+                    ths[i].classList.add("freeze-header");
+                }
+                var firstColumn = document.getElementById("dataTable").getElementsByTagName("tbody")[0].getElementsByTagName("tr");
+                for (var j = 0; j < firstColumn.length; j++) {
+                    firstColumn[j].getElementsByTagName("td")[0].classList.add("freeze-column");
+                }
+            }
+        </script>
     </body>
     </html>
     """
