@@ -1,7 +1,6 @@
 import os
 import ftplib
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
 from datetime import datetime, time
 import requests
@@ -17,9 +16,6 @@ FTP_HOST = os.getenv("FTP_HOST")
 FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
-
-# Global variable to store the last data fetched at 15:10
-last_data = None
 
 # Function to scrape live trading data
 def scrape_live_trading():
@@ -272,24 +268,33 @@ def generate_html(main_table):
                 row.classList.add("highlight");
             }}
 
-            function searchTable() {{
-                var input, filter, table, tr, td, i, txtValue;
-                input = document.getElementById("searchInput");
-                filter = input.value.toUpperCase();
-                table = document.getElementById("nepseTable");
-                tr = table.getElementsByTagName("tr");
-                for (i = 1; i < tr.length; i++) {{
-                    td = tr[i].getElementsByTagName("td")[1]; // Search in the Symbol column
-                    if (td) {{
-                        txtValue = td.textContent || td.innerText;
-                        if (txtValue.toUpperCase().indexOf(filter) > -1) {{
-                            tr[i].style.display = "";
-                        }} else {{
-                            tr[i].style.display = "none";
-                        }}
-                    }}
+            // Function to refresh the data every 10 minutes during trading hours
+            function refreshData() {{
+                var now = new Date();
+                var day = now.getDay();
+                var hour = now.getHours();
+                var minute = now.getMinutes();
+
+                if (day >= 0 && day <= 4 && (hour > 10 || (hour === 10 && minute >= 30)) && (hour < 15 || (hour === 15 && minute <= 10))) {{
+                    location.reload();
                 }}
             }}
+
+            setInterval(refreshData, 10 * 60 * 1000); // Refresh every 10 minutes
+
+            // Function to show the last data after trading hours
+            function showLastData() {{
+                var now = new Date();
+                var day = now.getDay();
+                var hour = now.getHours();
+
+                if (day === 5 || (hour > 15 || hour < 10) || (hour === 10 && now.getMinutes() < 30)) {{
+                    // Show the last data
+                    // You can implement showing the last data here
+                }}
+            }}
+
+            showLastData();
         </script>
     </head>
     <body>
@@ -299,7 +304,6 @@ def generate_html(main_table):
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
         </div>
-        <input type="text" id="searchInput" onkeyup="searchTable()" placeholder="Search for symbols.." style="width: 100%; padding: 8px; margin-top: 12px; margin-bottom: 12px;">
 
         <div class="table-container">
             <table id="nepseTable">
@@ -325,27 +329,23 @@ def generate_html(main_table):
     for row in main_table:
         change_class = "light-red" if float(row["Change%"]) < 0 else (
             "light-green" if float(row["Change%"]) > 0 else "light-blue")
+        symbol_class = "light-red" if float(row["Change%"]) < 0 else (
+            "light-green" if float(row["Change%"]) > 0 else "light-blue")
         html += f"""
             <tr onclick="highlightRow(this)">
-                <td>{row["SN"]}</td>
-                <td class="symbol {change_class}">{row["Symbol"]}</td>
-                <td>{row["LTP"]}</td>
-                <td class="{change_class}">{row["Change%"]}</td>
-                <td>{row["Day High"]}</td>
-                <td>{row["Day Low"]}</td>
-                <td>{row["Previous Close"]}</td>
-                <td>{row["Volume"]}</td>
-                <td>{row["Turnover"]}</td>
-                <td>{row["52 Week High"]}</td>
-                <td>{row["52 Week Low"]}</td>
-                <td>{row["Down From High (%)"]}</td>
-                <td>{row["Up From Low (%)"]}</td>
+                <td>{row["SN"]}</td><td class="symbol {symbol_class}">{row["Symbol"]}</td><td>{row["LTP"]}</td>
+                <td class="{change_class}">{row["Change%"]}</td><td>{row["Day High"]}</td>
+                <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
+                <td>{row["Volume"]}</td><td>{row["Turnover"]}</td>
+                <td>{row["52 Week High"]}</td><td>{row["52 Week Low"]}</td>
+                <td>{row["Down From High (%)"]}</td><td>{row["Up From Low (%)"]}</td>
             </tr>
         """
     html += """
-                </tbody>
-            </table>
-        </div>
+        </tbody>
+        </table>
+    </div>
+
     </body>
     </html>
     """
@@ -353,45 +353,29 @@ def generate_html(main_table):
 
 # Upload to FTP
 def upload_to_ftp(html_content):
-    logging.info("Uploading to FTP...")
-    try:
-        with open("index.html", "w", encoding="utf-8") as f:
-            f.write(html_content)
-        with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-            ftp.cwd("/htdocs")
-            with open("index.html", "rb") as f:
-                ftp.storbinary("STOR index.html", f)
-        logging.info("Upload successful!")
-    except ftplib.all_errors as e:
-        logging.error(f"Error uploading to FTP: {e}")
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(html_content)
+    with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
+        ftp.cwd("/htdocs")
+        with open("index.html", "rb") as f:
+            ftp.storbinary("STOR index.html", f)
 
 # Refresh Data
 def refresh_data():
-    global last_data
-    logging.info("Refreshing data...")
-    current_time = datetime.now(timezone("Asia/Kathmandu")).time()
-    start_time = time(10, 30)
-    end_time = time(15, 10)
-    if start_time <= current_time <= end_time:
-        live_data = scrape_live_trading()
-        today_data = scrape_today_share_price()
-        merged_data = merge_data(live_data, today_data)
-        if current_time == end_time:
-            last_data = merged_data  # Store the last data at 15:10
-    else:
-        logging.info("Outside trading hours. Using last available data.")
-        merged_data = last_data if last_data else []
+    live_data = scrape_live_trading()
+    today_data = scrape_today_share_price()
+    merged_data = merge_data(live_data, today_data)
     html_content = generate_html(merged_data)
     upload_to_ftp(html_content)
 
 # Scheduler
 scheduler = BackgroundScheduler()
-scheduler.add_job(refresh_data, CronTrigger(minute='*/10', hour='10-14', day_of_week='sun,mon,tue,wed,thu'))
-scheduler.add_job(refresh_data, CronTrigger(minute='0-10/10', hour='15', day_of_week='sun,mon,tue,wed,thu'))
+scheduler.add_job(refresh_data, "interval", minutes=10)
 scheduler.start()
 
 # Initial Data Refresh
 refresh_data()
 
+# Keep Running
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT)
