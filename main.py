@@ -254,7 +254,8 @@ def refresh_data():
 
 # Scheduler
 scheduler = BackgroundScheduler()
-scheduler.add_job(refresh_data, CronTrigger(minute='*/10', hour='10-15', day_of_week='sun-thu'))
+scheduler.add_job(refresh_data, CronTrigger(minute='*/10', hour='10-14', day_of_week='sun,mon,tue,wed,thu'))
+scheduler.add_job(refresh_data, CronTrigger(minute='0-10/10', hour='15', day_of_week='sun,mon,tue,wed,thu'))
 scheduler.start()
 
 if __name__ == "__main__":
