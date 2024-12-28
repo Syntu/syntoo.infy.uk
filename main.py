@@ -1,5 +1,5 @@
 import os
-import ftplib
+import aioftp
 import asyncio
 import aiohttp
 import aiofiles
