@@ -8,7 +8,7 @@ from pytz import timezone
 from datetime import datetime
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from flask import Flask, render_template_string
+from flask import Flask
 
 app = Flask(__name__)
 
@@ -19,48 +19,46 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Function to scrape live trading data
-async def scrape_live_trading():
-    url = "https://www.sharesansar.com/live-trading"
+# Function to scrape data from a given URL and parse it with BeautifulSoup
+async def scrape_data(url, parse_function):
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             content = await response.text()
             soup = BeautifulSoup(content, "html.parser")
-            rows = soup.find_all("tr")
-            data = []
-            for row in rows:
-                cells = row.find_all("td")
-                if len(cells) > 1:
-                    data.append({
-                        "Symbol": cells[1].text.strip(),
-                        "LTP": cells[2].text.strip().replace(",", ""),
-                        "Change%": cells[4].text.strip(),
-                        "Day High": cells[6].text.strip().replace(",", ""),
-                        "Day Low": cells[7].text.strip().replace(",", ""),
-                        "Previous Close": cells[9].text.strip().replace(",", ""),
-                        "Volume": cells[8].text.strip().replace(",", "")
-                    })
+            return parse_function(soup)
+
+# Parse function for live trading data
+def parse_live_trading(soup):
+    rows = soup.find_all("tr")
+    data = []
+    for row in rows:
+        cells = row.find_all("td")
+        if len(cells) > 1:
+            data.append({
+                "Symbol": cells[1].text.strip(),
+                "LTP": cells[2].text.strip().replace(",", ""),
+                "Change%": cells[4].text.strip(),
+                "Day High": cells[6].text.strip().replace(",", ""),
+                "Day Low": cells[7].text.strip().replace(",", ""),
+                "Previous Close": cells[9].text.strip().replace(",", ""),
+                "Volume": cells[8].text.strip().replace(",", "")
+            })
     return data
 
-# Function to scrape today's share price summary
-async def scrape_today_share_price():
-    url = "https://www.sharesansar.com/today-share-price"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            content = await response.text()
-            soup = BeautifulSoup(content, "html.parser")
-            rows = soup.find_all("tr")
-            data = []
-            for row in rows:
-                cells = row.find_all("td")
-                if len(cells) > 1:
-                    data.append({
-                        "SN": cells[0].text.strip(),
-                        "Symbol": cells[1].text.strip(),
-                        "Turnover": cells[10].text.strip().replace(",", ""),
-                        "52 Week High": cells[19].text.strip().replace(",", ""),
-                        "52 Week Low": cells[20].text.strip().replace(",", "")
-                    })
+# Parse function for today's share price summary
+def parse_today_share_price(soup):
+    rows = soup.find_all("tr")
+    data = []
+    for row in rows:
+        cells = row.find_all("td")
+        if len(cells) > 1:
+            data.append({
+                "SN": cells[0].text.strip(),
+                "Symbol": cells[1].text.strip(),
+                "Turnover": cells[10].text.strip().replace(",", ""),
+                "52 Week High": cells[19].text.strip().replace(",", ""),
+                "52 Week Low": cells[20].text.strip().replace(",", "")
+            })
     return data
 
 # Function to merge live and today's data
@@ -396,8 +394,8 @@ async def upload_to_ftp(html_content):
 
 # Refresh Data
 async def refresh_data():
-    live_data = await scrape_live_trading()
-    today_data = await scrape_today_share_price()
+    live_data = await scrape_data("https://www.sharesansar.com/live-trading", parse_live_trading)
+    today_data = await scrape_data("https://www.sharesansar.com/today-share-price", parse_today_share_price)
     merged_data = merge_data(live_data, today_data)
     html_content = generate_html(merged_data)
     await upload_to_ftp(html_content)
@@ -408,7 +406,7 @@ scheduler.add_job(refresh_data, "interval", minutes=5)
 scheduler.start()
 
 # Initial Data Refresh
-asyncio.run(refresh_data()
+asyncio.run(refresh_data())
 
 # Flask route to show data
 @app.route("/")
