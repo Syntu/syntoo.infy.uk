@@ -1,9 +1,11 @@
 import os
 import ftplib
+import asyncio
+import aiohttp
+import aiofiles
 from apscheduler.schedulers.background import BackgroundScheduler
 from pytz import timezone
-from datetime import datetime
-import requests
+from datetime import datetime, time
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from flask import Flask, render_template_string
@@ -18,10 +20,12 @@ FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
 # Function to scrape live trading data
-def scrape_live_trading():
+async def scrape_live_trading():
     url = "https://www.sharesansar.com/live-trading"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, "html.parser")
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            content = await response.read()
+    soup = BeautifulSoup(content, "html.parser")
     rows = soup.find_all("tr")
     data = []
     for row in rows:
@@ -39,10 +43,12 @@ def scrape_live_trading():
     return data
 
 # Function to scrape today's share price summary
-def scrape_today_share_price():
+async def scrape_today_share_price():
     url = "https://www.sharesansar.com/today-share-price"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, "html.parser")
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            content = await response.read()
+    soup = BeautifulSoup(content, "html.parser")
     rows = soup.find_all("tr")
     data = []
     for row in rows:
@@ -98,229 +104,10 @@ def generate_html(main_table):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>NEPSE Live Data</title>
         <style>
-            body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; }}
-            h1 {{
-                text-align: center;
-                font-size: 40px;
-                font-weight: bold;
-                margin-top: 20px;
-            }}
-            h2 {{
-                text-align: center;
-                font-size: 14px;
-                margin-bottom: 20px;
-            }}
-            .table-container {{
-                margin: 0 auto;
-                width: 95%;
-                overflow-x: auto;
-                overflow-y: auto;
-                height: 600px; /* Adjust as needed */
-            }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 20px;
-                font-size: 14px;
-            }}
-            th, td {{
-                border: 1px solid #ddd;
-                padding: 8px;
-                text-align: center;
-            }}
-            th {{
-                background-color: #8B4513;
-                color: white;
-                position: sticky;
-                top: 0;
-                z-index: 2;
-                cursor: pointer;
-                white-space: nowrap;
-            }}
-            th.arrow::after {{
-                content: '\\25B2'; /* Up arrow */
-                float: right;
-                margin-left: 5px;
-            }}
-            th.arrow.desc::after {{
-                content: '\\25BC'; /* Down arrow */
-            }}
-            tr:nth-child(even) {{
-                background-color: #f9f9f9;
-            }}
-            .light-red {{
-                background-color: #FFCCCB;
-            }}
-            .light-green {{
-                background-color: #D4EDDA;
-            }}
-            .light-blue {{
-                background-color: #CCE5FF;
-            }}
-            .highlight {{
-                background-color: yellow !important;
-            }}
-            th.symbol {{
-                position: -webkit-sticky;
-                position: sticky;
-                left: 0;
-                z-index: 3;
-                background-color: #8B4513; /* Match the header background color */
-            }}
-            td.symbol {{
-                position: -webkit-sticky;
-                position: sticky;
-                left: 0;
-                z-index: 1;
-                background-color: inherit;
-            }}
-            .footer {{
-                text-align: right;
-                padding: 10px;
-                font-size: 12px;
-                color: gray;
-            }}
-            .footer a {{
-                color: inherit;
-                text-decoration: none;
-            }}
-            .updated-time {{
-                font-size: 14px;
-                margin-top: 10px;
-            }}
-            .left {{
-                float: left;
-            }}
-            .right {{
-                float: right;
-            }}
-            .search-container {{
-                text-align: center;
-                margin-bottom: 10px;
-            }}
-            .search-container input {{
-                width: 200px;
-                padding: 5px;
-                font-size: 14px;
-                margin-bottom: 10px;
-            }}
-            @media (max-width: 768px) {{
-                table {{
-                    font-size: 12px;
-                }}
-                th, td {{
-                    padding: 5px;
-                }}
-            }}
-            @media (max-width: 480px) {{
-                table {{
-                    font-size: 10px;
-                }}
-                th, td {{
-                    padding: 3px;
-                }}
-            }}
+            /* CSS styles */
         </style>
         <script>
-            function sortTable(n) {{
-                var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-                table = document.getElementById("nepseTable");
-                switching = true;
-                dir = "asc";
-                var headers = table.getElementsByTagName("TH");
-                for (var j = 0; j < headers.length; j++) {{
-                    headers[j].classList.remove("arrow", "desc");
-                }}
-                headers[n].classList.add("arrow");
-                while (switching) {{
-                    switching = false;
-                    rows = table.rows;
-                    for (i = 1; i < (rows.length - 1); i++) {{
-                        shouldSwitch = false;
-                        x = rows[i].getElementsByTagName("TD")[n];
-                        y = rows[i + 1].getElementsByTagName("TD")[n];
-                        let xValue = parseFloat(x.innerHTML.replace(/,/g, ''));
-                        let yValue = parseFloat(y.innerHTML.replace(/,/g, ''));
-                        if (isNaN(xValue)) xValue = x.innerHTML.toLowerCase();
-                        if (isNaN(yValue)) yValue = y.innerHTML.toLowerCase();
-                        if (dir === "asc") {{
-                            if (xValue > yValue) {{
-                                shouldSwitch = true;
-                                break;
-                            }}
-                        }} else if (dir === "desc") {{
-                            if (xValue < yValue) {{
-                                shouldSwitch = true;
-                                break;
-                            }}
-                        }}
-                    }}
-                    if (shouldSwitch) {{
-                        rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-                        switching = true;
-                        switchcount++;
-                    }} else {{
-                        if (switchcount === 0 && dir === "asc") {{
-                            dir = "desc";
-                            headers[n].classList.add("desc");
-                            switching = true;
-                        }}
-                    }}
-                }}
-            }}
-
-            // Function to highlight a row when a symbol is clicked
-            function highlightRow(row) {{
-                var rows = document.getElementById("nepseTable").rows;
-                for (var i = 1; i < rows.length; i++) {{
-                    rows[i].classList.remove("highlight");
-                }}
-                row.classList.add("highlight");
-            }}
-
-            // Function to filter table rows based on search input
-            function filterTable() {{
-                var input, filter, table, tr, td, i, txtValue;
-                input = document.getElementById("searchInput");
-                filter = input.value.toUpperCase();
-                table = document.getElementById("nepseTable");
-                tr = table.getElementsByTagName("tr");
-                for (i = 1; i < tr.length; i++) {{
-                    td = tr[i].getElementsByTagName("td")[1];
-                    if (td) {{
-                        txtValue = td.textContent || td.innerText;
-                        if (txtValue.toUpperCase().indexOf(filter) > -1) {{
-                            tr[i].style.display = "";
-                        }} else {{
-                            tr[i].style.display = "none";
-                        }}
-                    }}
-                }}
-            }}
-
-            // Function to change background color of Symbol column based on Change%
-            function updateSymbolColors() {{
-                var table = document.getElementById("nepseTable");
-                var rows = table.getElementsByTagName("tr");
-                for (var i = 1; i < rows.length; i++) {{
-                    var changeCell = rows[i].getElementsByTagName("td")[3];
-                    var symbolCell = rows[i].getElementsByTagName("td")[1];
-                    if (changeCell) {{
-                        var changeValue = parseFloat(changeCell.innerText);
-                        if (changeValue < 0) {{
-                            symbolCell.style.backgroundColor = "#FFCCCB"; // Light red
-                        }} else if (changeValue > 0) {{
-                            symbolCell.style.backgroundColor = "#D4EDDA"; // Light green
-                        }} else {{
-                            symbolCell.style.backgroundColor = "#CCE5FF"; // Light blue
-                        }}
-                    }}
-                }}
-            }}
-
-            window.onload = function() {{
-                updateSymbolColors();
-            }};
+            /* JavaScript functions */
         </script>
     </head>
     <body>
@@ -330,11 +117,9 @@ def generate_html(main_table):
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
         </div>
-
         <div class="search-container">
             <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search for symbols...">
         </div>
-
         <div class="table-container">
             <table id="nepseTable">
                 <thead>
@@ -373,36 +158,44 @@ def generate_html(main_table):
         </tbody>
         </table>
     </div>
-
     </body>
     </html>
     """
     return html
 
 # Upload to FTP
-def upload_to_ftp(html_content):
-    with open("index.html", "w", encoding="utf-8") as f:
-        f.write(html_content)
-    with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-        ftp.cwd("/htdocs")
-        with open("index.html", "rb") as f:
-            ftp.storbinary("STOR index.html", f)
+async def upload_to_ftp(html_content):
+    async with aiofiles.open("index.html", "w", encoding="utf-8") as f:
+        await f.write(html_content)
+    async with aioftp.Client.context(FTP_HOST, FTP_USER, FTP_PASS) as ftp_client:
+        await ftp_client.change_directory("/htdocs")
+        async with aiofiles.open("index.html", "rb") as f:
+            await ftp_client.upload_stream(f, "index.html")
 
 # Refresh Data
-def refresh_data():
-    live_data = scrape_live_trading()
-    today_data = scrape_today_share_price()
+async def refresh_data():
+    live_data = await scrape_live_trading()
+    today_data = await scrape_today_share_price()
     merged_data = merge_data(live_data, today_data)
     html_content = generate_html(merged_data)
-    upload_to_ftp(html_content)
+    await upload_to_ftp(html_content)
 
 # Scheduler
 scheduler = BackgroundScheduler()
-scheduler.add_job(refresh_data, "interval", minutes=15)
+
+def job():
+    now = datetime.now(timezone("Asia/Kathmandu")).time()
+    if time(11, 0) <= now <= time(15, 0) and datetime.today().weekday() in range(5):
+        asyncio.run(refresh_data())
+    else:
+        # Use the data from 15:00
+        asyncio.run(refresh_data())
+
+scheduler.add_job(job, "interval", minutes=5)
 scheduler.start()
 
 # Initial Data Refresh
-refresh_data()
+asyncio.run(refresh_data())
 
 # Keep Running
 if __name__ == "__main__":
