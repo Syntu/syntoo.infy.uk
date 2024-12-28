@@ -407,7 +407,7 @@ async def refresh_data():
 scheduler = BackgroundScheduler()
 
 # Job to run every 5 minutes from Sunday to Thursday between 10:45 AM and 3:10 PM
-trigger = CronTrigger(day_of_week='sun-thu', hour='10-14', minute='*/5')
+trigger = CronTrigger(day_of_week='sun-thu', hour='10-14', minute='0,5,10,15,20,25,30,35,40,45,50,55')
 scheduler.add_job(refresh_data, trigger=trigger)
 
 # Job to run at 3:15 PM every day
