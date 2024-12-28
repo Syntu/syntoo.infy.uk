@@ -385,20 +385,28 @@ def generate_html(main_table):
 
 # Upload to FTP
 async def upload_to_ftp(html_content):
-    async with aiofiles.open("index.html", "w", encoding="utf-8") as f:
-        await f.write(html_content)
-    async with aioftp.Client.context(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-        await ftp.change_directory("/htdocs")
-        async with aiofiles.open("index.html", "rb") as f:
-            await ftp.upload_stream(f, "index.html")
+    try:
+        async with aiofiles.open("index.html", "w", encoding="utf-8") as f:
+            await f.write(html_content)
+        async with aioftp.Client.context(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
+            await ftp.change_directory("/htdocs")
+            async with aiofiles.open("index.html", "rb") as f:
+                await ftp.upload_stream(f, "index.html")
+    except aioftp.errors.StatusCodeError as e:
+        print(f"FTP Error: {e}")
+    except Exception as e:
+        print(f"Error: {e}")
 
 # Refresh Data
 async def refresh_data():
-    live_data = await scrape_data("https://www.sharesansar.com/live-trading", parse_live_trading)
-    today_data = await scrape_data("https://www.sharesansar.com/today-share-price", parse_today_share_price)
-    merged_data = merge_data(live_data, today_data)
-    html_content = generate_html(merged_data)
-    await upload_to_ftp(html_content)
+    try:
+        live_data = await scrape_data("https://www.sharesansar.com/live-trading", parse_live_trading)
+        today_data = await scrape_data("https://www.sharesansar.com/today-share-price", parse_today_share_price)
+        merged_data = merge_data(live_data, today_data)
+        html_content = generate_html(merged_data)
+        await upload_to_ftp(html_content)
+    except Exception as e:
+        print(f"Error during data refresh: {e}")
 
 # Scheduler
 scheduler = BackgroundScheduler()
