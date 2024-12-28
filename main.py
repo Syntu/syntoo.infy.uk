@@ -45,7 +45,23 @@ def scrape_today_share_price():
         response = requests.get(url)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, "html.parser")
-        return parse_table(soup)
+        rows = soup.find_all("tr")
+        data = []
+        for row in rows:
+            cells = row.find_all("td")
+            if len(cells) > 1:
+                # Log missing keys for debugging
+                try:
+                    data.append({
+                        "SN": cells[0].text.strip(),
+                        "Symbol": cells[1].text.strip(),
+                        "Turnover": cells[10].text.strip().replace(",", ""),
+                        "52 Week High": cells[19].text.strip().replace(",", ""),
+                        "52 Week Low": cells[20].text.strip().replace(",", "")
+                    })
+                except IndexError as e:
+                    logging.error(f"Error parsing row: {e}")
+        return data
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to fetch today's share price data: {e}")
         return []
@@ -72,17 +88,25 @@ def parse_table(soup):
 def merge_data(live_data, today_data):
     merged = []
     today_dict = {item["Symbol"]: item for item in today_data}
+
     for live in live_data:
         symbol = live["Symbol"]
         if symbol in today_dict:
             today = today_dict[symbol]
-            high = today["52 Week High"]
-            low = today["52 Week Low"]
+            high = today.get("52 Week High", "N/A")
+            low = today.get("52 Week Low", "N/A")
             ltp = live["LTP"]
-            down_from_high = (float(high) - float(ltp)) / float(high) * 100 if high != "N/A" and ltp != "N/A" else "N/A"
-            up_from_low = (float(ltp) - float(low)) / float(low) * 100 if low != "N/A" and ltp != "N/A" else "N/A"
+            
+            try:
+                down_from_high = (float(high) - float(ltp)) / float(high) * 100 if high != "N/A" and ltp != "N/A" else "N/A"
+                up_from_low = (float(ltp) - float(low)) / float(low) * 100 if low != "N/A" and ltp != "N/A" else "N/A"
+            except ValueError as e:
+                logging.error(f"Error calculating percentages for symbol {symbol}: {e}")
+                down_from_high = "N/A"
+                up_from_low = "N/A"
+
             merged.append({
-                "SN": today["SN"],
+                "SN": today.get("SN", ""),
                 "Symbol": symbol,
                 "LTP": live["LTP"],
                 "Change%": live["Change%"],
@@ -90,9 +114,9 @@ def merge_data(live_data, today_data):
                 "Day Low": live["Day Low"],
                 "Previous Close": live["Previous Close"],
                 "Volume": live["Volume"],
-                "Turnover": today["Turnover"],
-                "52 Week High": today["52 Week High"],
-                "52 Week Low": today["52 Week Low"],
+                "Turnover": today.get("Turnover", "N/A"),
+                "52 Week High": high,
+                "52 Week Low": low,
                 "Down From High (%)": f"{down_from_high:.2f}" if isinstance(down_from_high, float) else "N/A",
                 "Up From Low (%)": f"{up_from_low:.2f}" if isinstance(up_from_low, float) else "N/A"
             })
