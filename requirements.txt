@@ -6,3 +6,5 @@ flask
 pytz
 asyncio
 aiohttp
+aioftp
+aiofiles
