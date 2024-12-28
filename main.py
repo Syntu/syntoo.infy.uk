@@ -122,8 +122,8 @@ def merge_data(live_data, today_data):
             })
     return merged
 
-# Function to generate HTML
-def generate_html(main_table):
+# Function to generate HTML            .light-blue {{
+    def generate_html(main_table):
     updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
     html = f"""
     <!DOCTYPE html>
@@ -291,8 +291,14 @@ def generate_html(main_table):
                 <tbody>
     """
     for row in main_table:
-        change_class = "light-red" if float(row["Change%"]) < 0 else (
-            "light-green" if float(row["Change%"]) > 0 else "light-blue")
+        # Determine the class based on Change%
+        try:
+            change_percent = float(row["Change%"].replace("%", ""))
+            change_class = "light-red" if change_percent < 0 else (
+                "light-green" if change_percent > 0 else "light-blue")
+        except ValueError:
+            change_class = "light-blue"  # Default class if Change% is not a number
+
         html += f"""
             <tr onclick="highlightRow(this)">
                 <td>{row["SN"]}</td><td class="symbol {change_class}">{row["Symbol"]}</td><td>{row["LTP"]}</td>
