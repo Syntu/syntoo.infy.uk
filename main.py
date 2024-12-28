@@ -1,14 +1,14 @@
 import os
-import aioftp
-import asyncio
-import aiohttp
-import aiofiles
+import ftplib
+import logging
 from apscheduler.schedulers.background import BackgroundScheduler
-from pytz import timezone
-from datetime import datetime, time
+from apscheduler.jobstores.memory import MemoryJobStore
+from datetime import datetime
+import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from flask import Flask, render_template_string
+from flask import Flask
+from pytz import timezone
 
 app = Flask(__name__)
 
@@ -19,15 +19,41 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
+# Initialize logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize variables to track last updated data
+last_updated_data = None
+
 # Function to scrape live trading data
-async def scrape_live_trading():
-    url = "https://www.sharesansar.com/live-trading"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            content = await response.read()
-    soup = BeautifulSoup(content, "html.parser")
-    rows = soup.find_all("tr")
+def scrape_live_trading():
+    try:
+        url = "https://www.sharesansar.com/live-trading"
+        response = requests.get(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, "html.parser")
+        return parse_table(soup)
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to fetch live trading data: {e}")
+        return []
+
+# Function to scrape today's share price summary
+def scrape_today_share_price():
+    try:
+        url = "https://www.sharesansar.com/today-share-price"
+        response = requests.get(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, "html.parser")
+        return parse_table(soup)
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to fetch today's share price data: {e}")
+        return []
+
+# Helper function to parse table rows
+def parse_table(soup):
     data = []
+    rows = soup.find_all("tr")
     for row in rows:
         cells = row.find_all("td")
         if len(cells) > 1:
@@ -39,27 +65,6 @@ async def scrape_live_trading():
                 "Day Low": cells[7].text.strip().replace(",", ""),
                 "Previous Close": cells[9].text.strip().replace(",", ""),
                 "Volume": cells[8].text.strip().replace(",", "")
-            })
-    return data
-
-# Function to scrape today's share price summary
-async def scrape_today_share_price():
-    url = "https://www.sharesansar.com/today-share-price"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            content = await response.read()
-    soup = BeautifulSoup(content, "html.parser")
-    rows = soup.find_all("tr")
-    data = []
-    for row in rows:
-        cells = row.find_all("td")
-        if len(cells) > 1:
-            data.append({
-                "SN": cells[0].text.strip(),
-                "Symbol": cells[1].text.strip(),
-                "Turnover": cells[10].text.strip().replace(",", ""),
-                "52 Week High": cells[19].text.strip().replace(",", ""),
-                "52 Week Low": cells[20].text.strip().replace(",", "")
             })
     return data
 
@@ -104,11 +109,129 @@ def generate_html(main_table):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>NEPSE Live Data</title>
         <style>
-            /* CSS styles */
+            body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; }}
+            h1 {{
+                text-align: center;
+                font-size: 40px;
+                font-weight: bold;
+                margin-top: 20px;
+            }}
+            h2 {{
+                text-align: center;
+                font-size: 14px;
+                margin-bottom: 20px;
+            }}
+            .table-container {{
+                margin: 0 auto;
+                width: 95%;
+                overflow-x: auto;
+                overflow-y: auto;
+                height: 600px; /* Adjust as needed */
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+                font-size: 14px;
+            }}
+            th, td {{
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: center;
+            }}
+            th {{
+                background-color: #8B4513;
+                color: white;
+                position: sticky;
+                top: 0;
+                z-index: 2;
+                cursor: pointer;
+                white-space: nowrap;
+            }}
+            th.arrow::after {{
+                content: '\\25B2'; /* Up arrow */
+                float: right;
+                margin-left: 5px;
+            }}
+            th.arrow.desc::after {{
+                content: '\\25BC'; /* Down arrow */
+            }}
+            tr:nth-child(even) {{
+                background-color: #f9f9f9;
+            }}
+            .light-red {{
+                background-color: #FFCCCB;
+            }}
+            .light-green {{
+                background-color: #D4EDDA;
+            }}
+            .light-blue {{
+                background-color: #CCE5FF;
+            }}
+            .highlight {{
+                background-color: yellow !important;
+            }}
+            th.symbol {{
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0;
+                z-index: 3;
+                background-color: #8B4513; /* Match the header background color */
+            }}
+            td.symbol {{
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0;
+                z-index: 1;
+                background-color: inherit;
+            }}
+            .footer {{
+                text-align: right;
+                padding: 10px;
+                font-size: 12px;
+                color: gray;
+            }}
+            .footer a {{
+                color: inherit;
+                text-decoration: none;
+            }}
+            .updated-time {{
+                font-size: 14px;
+                margin-top: 10px;
+            }}
+            .left {{
+                float: left;
+            }}
+            .right {{
+                float: right;
+            }}
+            .search-container {{
+                text-align: center;
+                margin-bottom: 10px;
+            }}
+            .search-container input {{
+                width: 200px;
+                padding: 5px;
+                font-size: 14px;
+                margin-bottom: 10px;
+            }}
+            @media (max-width: 768px) {{
+                table {{
+                    font-size: 12px;
+                }}
+                th, td {{
+                    padding: 5px;
+                }}
+            }}
+            @media (max-width: 480px) {{
+                table {{
+                    font-size: 10px;
+                }}
+                th, td {{
+                    padding: 3px;
+                }}
+            }}
         </style>
-        <script>
-            /* JavaScript functions */
-        </script>
     </head>
     <body>
         <h1>NEPSE Live Data</h1>
@@ -117,9 +240,11 @@ def generate_html(main_table):
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
         </div>
+
         <div class="search-container">
             <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search for symbols...">
         </div>
+
         <div class="table-container">
             <table id="nepseTable">
                 <thead>
@@ -158,45 +283,44 @@ def generate_html(main_table):
         </tbody>
         </table>
     </div>
+
     </body>
     </html>
     """
     return html
 
 # Upload to FTP
-async def upload_to_ftp(html_content):
-    async with aiofiles.open("index.html", "w", encoding="utf-8") as f:
-        await f.write(html_content)
-    async with aioftp.Client.context(FTP_HOST, FTP_USER, FTP_PASS) as ftp_client:
-        await ftp_client.change_directory("/htdocs")
-        async with aiofiles.open("index.html", "rb") as f:
-            await ftp_client.upload_stream(f, "index.html")
+def upload_to_ftp(html_content):
+    try:
+        with open("index.html", "w", encoding="utf-8") as f:
+            f.write(html_content)
+        with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
+            ftp.cwd("/htdocs")
+            with open("index.html", "rb") as f:
+                ftp.storbinary("STOR index.html", f)
+    except Exception as e:
+        logger.error(f"Failed to upload to FTP: {e}")
 
-# Refresh Data
-async def refresh_data():
-    live_data = await scrape_live_trading()
-    today_data = await scrape_today_share_price()
+# Refresh Data for live session
+def refresh_data():
+    global last_updated_data
+    live_data = scrape_live_trading()
+    today_data = scrape_today_share_price()
     merged_data = merge_data(live_data, today_data)
+    last_updated_data = merged_data
     html_content = generate_html(merged_data)
-    await upload_to_ftp(html_content)
+    upload_to_ftp(html_content)
 
 # Scheduler
 scheduler = BackgroundScheduler()
-
-def job():
-    now = datetime.now(timezone("Asia/Kathmandu")).time()
-    if time(11, 0) <= now <= time(15, 0) and datetime.today().weekday() in range(5):
-        asyncio.run(refresh_data())
-    else:
-        # Use the data from 15:00
-        asyncio.run(refresh_data())
-
-scheduler.add_job(job, "interval", minutes=5)
+scheduler.add_job(refresh_data, 'interval', minutes=5, start_date="2024-12-28 11:00:00", end_date="2024-12-28 15:00:00", timezone="Asia/Kathmandu")
+scheduler.add_job(lambda: generate_html(last_updated_data), 'interval', days=1, start_date="2024-12-28 15:00:00", timezone="Asia/Kathmandu")
 scheduler.start()
 
 # Initial Data Refresh
-asyncio.run(refresh_data())
+refresh_data()
 
 # Keep Running
 if __name__ == "__main__":
+    logger.info("Starting Flask app...")
     app.run(host="0.0.0.0", port=PORT)
