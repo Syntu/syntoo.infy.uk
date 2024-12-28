@@ -1,14 +1,15 @@
 import os
 import ftplib
-import asyncio
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
-from datetime import datetime, time as datetime_time
-import aiohttp
-from aiohttp import ClientSession
+from datetime import datetime
+import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from flask import Flask, render_template_string
+import asyncio
+import aiohttp
 
 app = Flask(__name__)
 
@@ -19,45 +20,49 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Function to scrape live trading data
-async def scrape_live_trading(session: ClientSession):
+# Asynchronous function to scrape live trading data
+async def scrape_live_trading():
     url = "https://www.sharesansar.com/live-trading"
-    async with session.get(url) as response:
-        soup = BeautifulSoup(await response.text(), "html.parser")
-    rows = soup.find_all("tr")
-    data = []
-    for row in rows:
-        cells = row.find_all("td")
-        if len(cells) > 1:
-            data.append({
-                "Symbol": cells[1].text.strip(),
-                "LTP": cells[2].text.strip().replace(",", ""),
-                "Change%": cells[4].text.strip(),
-                "Day High": cells[6].text.strip().replace(",", ""),
-                "Day Low": cells[7].text.strip().replace(",", ""),
-                "Previous Close": cells[9].text.strip().replace(",", ""),
-                "Volume": cells[8].text.strip().replace(",", "")
-            })
-    return data
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            content = await response.text()
+            soup = BeautifulSoup(content, "html.parser")
+            rows = soup.find_all("tr")
+            data = []
+            for row in rows:
+                cells = row.find_all("td")
+                if len(cells) > 1:
+                    data.append({
+                        "Symbol": cells[1].text.strip(),
+                        "LTP": cells[2].text.strip().replace(",", ""),
+                        "Change%": cells[4].text.strip(),
+                        "Day High": cells[6].text.strip().replace(",", ""),
+                        "Day Low": cells[7].text.strip().replace(",", ""),
+                        "Previous Close": cells[9].text.strip().replace(",", ""),
+                        "Volume": cells[8].text.strip().replace(",", "")
+                    })
+            return data
 
-# Function to scrape today's share price summary
-async def scrape_today_share_price(session: ClientSession):
+# Asynchronous function to scrape today's share price summary
+async def scrape_today_share_price():
     url = "https://www.sharesansar.com/today-share-price"
-    async with session.get(url) as response:
-        soup = BeautifulSoup(await response.text(), "html.parser")
-    rows = soup.find_all("tr")
-    data = []
-    for row in rows:
-        cells = row.find_all("td")
-        if len(cells) > 1:
-            data.append({
-                "SN": cells[0].text.strip(),
-                "Symbol": cells[1].text.strip(),
-                "Turnover": cells[10].text.strip().replace(",", ""),
-                "52 Week High": cells[19].text.strip().replace(",", ""),
-                "52 Week Low": cells[20].text.strip().replace(",", "")
-            })
-    return data
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            content = await response.text()
+            soup = BeautifulSoup(content, "html.parser")
+            rows = soup.find_all("tr")
+            data = []
+            for row in rows:
+                cells = row.find_all("td")
+                if len(cells) > 1:
+                    data.append({
+                        "SN": cells[0].text.strip(),
+                        "Symbol": cells[1].text.strip(),
+                        "Turnover": cells[10].text.strip().replace(",", ""),
+                        "52 Week High": cells[19].text.strip().replace(",", ""),
+                        "52 Week Low": cells[20].text.strip().replace(",", "")
+                    })
+            return data
 
 # Function to merge live and today's data
 def merge_data(live_data, today_data):
@@ -100,10 +105,229 @@ def generate_html(main_table):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>NEPSE Live Data</title>
         <style>
-            /* Style as previously defined */
+            body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; }}
+            h1 {{
+                text-align: center;
+                font-size: 40px;
+                font-weight: bold;
+                margin-top: 20px;
+            }}
+            h2 {{
+                text-align: center;
+                font-size: 14px;
+                margin-bottom: 20px;
+            }}
+            .table-container {{
+                margin: 0 auto;
+                width: 95%;
+                overflow-x: auto;
+                overflow-y: auto;
+                height: 600px; /* Adjust as needed */
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+                font-size: 14px;
+            }}
+            th, td {{
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: center;
+            }}
+            th {{
+                background-color: #8B4513;
+                color: white;
+                position: sticky;
+                top: 0;
+                z-index: 2;
+                cursor: pointer;
+                white-space: nowrap;
+            }}
+            th.arrow::after {{
+                content: '\\25B2'; /* Up arrow */
+                float: right;
+                margin-left: 5px;
+            }}
+            th.arrow.desc::after {{
+                content: '\\25BC'; /* Down arrow */
+            }}
+            tr:nth-child(even) {{
+                background-color: #f9f9f9;
+            }}
+            .light-red {{
+                background-color: #FFCCCB;
+            }}
+            .light-green {{
+                background-color: #D4EDDA;
+            }}
+            .light-blue {{
+                background-color: #CCE5FF;
+            }}
+            .highlight {{
+                background-color: yellow !important;
+            }}
+            th.symbol {{
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0;
+                z-index: 3;
+                background-color: #8B4513; /* Match the header background color */
+            }}
+            td.symbol {{
+                position: -webkit-sticky;
+                position: sticky;
+                left: 0;
+                z-index: 1;
+                background-color: inherit;
+            }}
+            .footer {{
+                text-align: right;
+                padding: 10px;
+                font-size: 12px;
+                color: gray;
+            }}
+            .footer a {{
+                color: inherit;
+                text-decoration: none;
+            }}
+            .updated-time {{
+                font-size: 14px;
+                margin-top: 10px;
+            }}
+            .left {{
+                float: left;
+            }}
+            .right {{
+                float: right;
+            }}
+            .search-container {{
+                text-align: center;
+                margin-bottom: 10px;
+            }}
+            .search-container input {{
+                width: 200px;
+                padding: 5px;
+                font-size: 14px;
+                margin-bottom: 10px;
+            }}
+            @media (max-width: 768px) {{
+                table {{
+                    font-size: 12px;
+                }}
+                th, td {{
+                    padding: 5px;
+                }}
+            }}
+            @media (max-width: 480px) {{
+                table {{
+                    font-size: 10px;
+                }}
+                th, td {{
+                    padding: 3px;
+                }}
+            }}
         </style>
         <script>
-            /* JavaScript as previously defined */
+            function sortTable(n) {{
+                var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+                table = document.getElementById("nepseTable");
+                switching = true;
+                dir = "asc";
+                var headers = table.getElementsByTagName("TH");
+                for (var j = 0; j < headers.length; j++) {{
+                    headers[j].classList.remove("arrow", "desc");
+                }}
+                headers[n].classList.add("arrow");
+                while (switching) {{
+                    switching = false;
+                    rows = table.rows;
+                    for (i = 1; i < (rows.length - 1); i++) {{
+                        shouldSwitch = false;
+                        x = rows[i].getElementsByTagName("TD")[n];
+                        y = rows[i + 1].getElementsByTagName("TD")[n];
+                        let xValue = parseFloat(x.innerHTML.replace(/,/g, ''));
+                        let yValue = parseFloat(y.innerHTML.replace(/,/g, ''));
+                        if (isNaN(xValue)) xValue = x.innerHTML.toLowerCase();
+                        if (isNaN(yValue)) yValue = y.innerHTML.toLowerCase();
+                        if (dir === "asc") {{
+                            if (xValue > yValue) {{
+                                shouldSwitch = true;
+                                break;
+                            }}
+                        }} else if (dir === "desc") {{
+                            if (xValue < yValue) {{
+                                shouldSwitch = true;
+                                break;
+                            }}
+                        }}
+                    }}
+                    if (shouldSwitch) {{
+                        rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                        switching = true;
+                        switchcount++;
+                    }} else {{
+                        if (switchcount === 0 && dir === "asc") {{
+                            dir = "desc";
+                            headers[n].classList.add("desc");
+                            switching = true;
+                        }}
+                    }}
+                }}
+            }}
+
+            // Function to highlight a row when a symbol is clicked
+            function highlightRow(row) {{
+                var rows = document.getElementById("nepseTable").rows;
+                for (var i = 1; i < rows.length; i++) {{
+                    rows[i].classList.remove("highlight");
+                }}
+                row.classList.add("highlight");
+            }}
+
+            // Function to filter table rows based on search input
+            function filterTable() {{
+                var input, filter, table, tr, td, i, txtValue;
+                input = document.getElementById("searchInput");
+                filter = input.value.toUpperCase();
+                table = document.getElementById("nepseTable");
+                tr = table.getElementsByTagName("tr");
+                for (i = 1; i < tr.length; i++) {{
+                    td = tr[i].getElementsByTagName("td")[1];
+                    if (td) {{
+                        txtValue = td.textContent || td.innerText;
+                        if (txtValue.toUpperCase().indexOf(filter) > -1) {{
+                            tr[i].style.display = "";
+                        }} else {{
+                            tr[i].style.display = "none";
+                        }}
+                    }}
+                }}
+            }}
+
+            // Function to change background color of Symbol column based on Change%
+            function updateSymbolColors() {{
+                var table = document.getElementById("nepseTable");
+                var rows = table.getElementsByTagName("tr");
+                for (var i = 1; i < rows.length; i++) {{
+                    var changeCell = rows[i].getElementsByTagName("td")[3];
+                    var symbolCell = rows[i].getElementsByTagName("td")[1];
+                    if (changeCell) {{
+                        var changeValue = parseFloat(changeCell.innerText);
+                        if (changeValue < 0) {{
+                            symbolCell.style.backgroundColor = "#FFCCCB"; // Light red
+                        }} else if (changeValue > 0) {{
+                            symbolCell.style.backgroundColor = "#D4EDDA"; // Light green
+                        }} else {{
+                            symbolCell.style.backgroundColor = "#CCE5FF"; // Light blue
+                        }}
+                    }}
+                }}
+            }}
+
+            window.onload = function() {{
+                updateSymbolColors();
+            }};
         </script>
     </head>
     <body>
@@ -162,44 +386,39 @@ def generate_html(main_table):
     """
     return html
 
-# Upload to FTP
+# Asynchronous upload to FTP
 async def upload_to_ftp(html_content):
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(html_content)
-    with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-        ftp.cwd("/htdocs")
-        with open("index.html", "rb") as f:
-            ftp.storbinary("STOR index.html", f)
+    async with aioftp.ClientSession(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
+        async with ftp.cd("/htdocs"):
+            async with aiofiles.open("index.html", "rb") as f:
+                await ftp.storbinary("STOR index.html", f)
 
 # Refresh Data
 async def refresh_data():
-    async with ClientSession() as session:
-        live_data = await scrape_live_trading(session)
-        today_data = await scrape_today_share_price(session)
-        merged_data = merge_data(live_data, today_data)
-        html_content = generate_html(merged_data)
-        await upload_to_ftp(html_content)
+    live_data = await scrape_live_trading()
+    today_data = await scrape_today_share_price()
+    merged_data = merge_data(live_data, today_data)
+    html_content = generate_html(merged_data)
+    await upload_to_ftp(html_content)
 
-# Determine if it's during the allowed period for frequent updates
-def is_within_trading_hours():
-    now = datetime.now(timezone("Asia/Kathmandu")).time()
-    trading_start = datetime_time(10, 45)
-    trading_end = datetime_time(15, 10)
-    return trading_start <= now <= trading_end
+# Scheduler
+scheduler = BackgroundScheduler()
 
-# Scheduler to run tasks every minute
-async def schedule_jobs():
-    scheduler = BackgroundScheduler()
-    if is_within_trading_hours():
-        scheduler.add_job(refresh_data, 'interval', minutes=5)
-    else:
-        scheduler.add_job(refresh_data, 'interval', days=1, start_date="2024-12-29 15:15:00")
-    scheduler.start()
+# Job to run every 5 minutes from Sunday to Thursday between 10:45 AM and 3:10 PM
+trigger = CronTrigger(day_of_week='sun-thu', hour='10-14', minute='*/5')
+scheduler.add_job(refresh_data, trigger=trigger)
+
+# Job to run at 3:15 PM every day
+trigger_daily = CronTrigger(hour=15, minute=15)
+scheduler.add_job(refresh_data, trigger=trigger_daily)
+
+scheduler.start()
 
 # Initial Data Refresh
-async def start():
-    await refresh_data()
+asyncio.run(refresh_data())
 
+# Keep Running
 if __name__ == "__main__":
-    asyncio.run(start())
-    app.run(debug=True, host="0.0.0.0", port=PORT)
+    app.run(host="0.0.0.0", port=PORT)
