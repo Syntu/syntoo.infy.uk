@@ -2,7 +2,6 @@ import os
 import ftplib
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.jobstores.memory import MemoryJobStore
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
@@ -60,7 +59,7 @@ def scrape_today_share_price():
                         "52 Week Low": cells[20].text.strip().replace(",", "")
                     })
                 except IndexError as e:
-                    logging.error(f"Error parsing row: {e}")
+                    logger.error(f"Error parsing row: {e}")
         return data
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to fetch today's share price data: {e}")
@@ -83,6 +82,7 @@ def parse_table(soup):
                 "Volume": cells[8].text.strip().replace(",", "")
             })
     return data
+
 # Function to merge live and today's data
 def merge_data(live_data, today_data):
     merged = []
@@ -100,7 +100,7 @@ def merge_data(live_data, today_data):
                 down_from_high = (float(high) - float(ltp)) / float(high) * 100 if high != "N/A" and ltp != "N/A" else "N/A"
                 up_from_low = (float(ltp) - float(low)) / float(low) * 100 if low != "N/A" and ltp != "N/A" else "N/A"
             except ValueError as e:
-                logging.error(f"Error calculating percentages for symbol {symbol}: {e}")
+                logger.error(f"Error calculating percentages for symbol {symbol}: {e}")
                 down_from_high = "N/A"
                 up_from_low = "N/A"
 
@@ -311,7 +311,7 @@ def generate_html(main_table):
     </html>
     """
     return html
-    
+
 # Upload to FTP
 def upload_to_ftp(html_content):
     try:
