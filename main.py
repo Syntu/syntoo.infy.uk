@@ -1,15 +1,12 @@
 import os
 import ftplib
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from flask import Flask, render_template_string
-import asyncio
-import aiohttp
 
 app = Flask(__name__)
 
@@ -20,49 +17,45 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Asynchronous function to scrape live trading data
-async def scrape_live_trading():
+# Function to scrape live trading data
+def scrape_live_trading():
     url = "https://www.sharesansar.com/live-trading"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            content = await response.text()
-            soup = BeautifulSoup(content, "html.parser")
-            rows = soup.find_all("tr")
-            data = []
-            for row in rows:
-                cells = row.find_all("td")
-                if len(cells) > 1:
-                    data.append({
-                        "Symbol": cells[1].text.strip(),
-                        "LTP": cells[2].text.strip().replace(",", ""),
-                        "Change%": cells[4].text.strip(),
-                        "Day High": cells[6].text.strip().replace(",", ""),
-                        "Day Low": cells[7].text.strip().replace(",", ""),
-                        "Previous Close": cells[9].text.strip().replace(",", ""),
-                        "Volume": cells[8].text.strip().replace(",", "")
-                    })
-            return data
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, "html.parser")
+    rows = soup.find_all("tr")
+    data = []
+    for row in rows:
+        cells = row.find_all("td")
+        if len(cells) > 1:
+            data.append({
+                "Symbol": cells[1].text.strip(),
+                "LTP": cells[2].text.strip().replace(",", ""),
+                "Change%": cells[4].text.strip(),
+                "Day High": cells[6].text.strip().replace(",", ""),
+                "Day Low": cells[7].text.strip().replace(",", ""),
+                "Previous Close": cells[9].text.strip().replace(",", ""),
+                "Volume": cells[8].text.strip().replace(",", "")
+            })
+    return data
 
-# Asynchronous function to scrape today's share price summary
-async def scrape_today_share_price():
+# Function to scrape today's share price summary
+def scrape_today_share_price():
     url = "https://www.sharesansar.com/today-share-price"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            content = await response.text()
-            soup = BeautifulSoup(content, "html.parser")
-            rows = soup.find_all("tr")
-            data = []
-            for row in rows:
-                cells = row.find_all("td")
-                if len(cells) > 1:
-                    data.append({
-                        "SN": cells[0].text.strip(),
-                        "Symbol": cells[1].text.strip(),
-                        "Turnover": cells[10].text.strip().replace(",", ""),
-                        "52 Week High": cells[19].text.strip().replace(",", ""),
-                        "52 Week Low": cells[20].text.strip().replace(",", "")
-                    })
-            return data
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, "html.parser")
+    rows = soup.find_all("tr")
+    data = []
+    for row in rows:
+        cells = row.find_all("td")
+        if len(cells) > 1:
+            data.append({
+                "SN": cells[0].text.strip(),
+                "Symbol": cells[1].text.strip(),
+                "Turnover": cells[10].text.strip().replace(",", ""),
+                "52 Week High": cells[19].text.strip().replace(",", ""),
+                "52 Week Low": cells[20].text.strip().replace(",", "")
+            })
+    return data
 
 # Function to merge live and today's data
 def merge_data(live_data, today_data):
@@ -332,7 +325,7 @@ def generate_html(main_table):
     </head>
     <body>
         <h1>NEPSE Live Data</h1>
-        <h2>Welcome 馃檹 to my Nepse Data website</h2>
+        <h2>Welcome 🙏 to my Nepse Data website</h2>
         <div class="updated-time">
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
@@ -386,38 +379,30 @@ def generate_html(main_table):
     """
     return html
 
-# Asynchronous upload to FTP
-async def upload_to_ftp(html_content):
+# Upload to FTP
+def upload_to_ftp(html_content):
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(html_content)
-    async with aioftp.ClientSession(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-        async with ftp.cd("/htdocs"):
-            async with aiofiles.open("index.html", "rb") as f:
-                await ftp.storbinary("STOR index.html", f)
+    with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
+        ftp.cwd("/htdocs")
+        with open("index.html", "rb") as f:
+            ftp.storbinary("STOR index.html", f)
 
 # Refresh Data
-async def refresh_data():
-    live_data = await scrape_live_trading()
-    today_data = await scrape_today_share_price()
+def refresh_data():
+    live_data = scrape_live_trading()
+    today_data = scrape_today_share_price()
     merged_data = merge_data(live_data, today_data)
     html_content = generate_html(merged_data)
-    await upload_to_ftp(html_content)
+    upload_to_ftp(html_content)
 
 # Scheduler
 scheduler = BackgroundScheduler()
-
-# Job to run every 5 minutes from Sunday to Thursday between 10:50 AM and 3:15 PM
-scheduler.add_job(refresh_data, CronTrigger(day_of_week='sun-thu', hour=10, minute='50,55'))
-scheduler.add_job(refresh_data, CronTrigger(day_of_week='sun-thu', hour='11-14', minute='0,5,10,15,20,25,30,35,40,45,50,55'))
-scheduler.add_job(refresh_data, CronTrigger(day_of_week='sun-thu', hour=15, minute='0,5,10,15'))
-
-# Job to run at 3:15 PM every day
-scheduler.add_job(refresh_data, CronTrigger(hour=15, minute=15))
-
+scheduler.add_job(refresh_data, "interval", minutes=15)
 scheduler.start()
 
 # Initial Data Refresh
-asyncio.run(refresh_data())
+refresh_data()
 
 # Keep Running
 if __name__ == "__main__":
