@@ -1,19 +1,14 @@
 import os
 import ftplib
-import logging
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, render_template_string
 
 app = Flask(__name__)
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Load environment variables
 load_dotenv()
@@ -24,53 +19,43 @@ PORT = int(os.getenv("PORT", 5000))
 
 # Function to scrape live trading data
 def scrape_live_trading():
-    try:
-        url = "https://www.sharesansar.com/live-trading"
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an HTTPError for bad responses
-        soup = BeautifulSoup(response.content, "html.parser")
-        rows = soup.find_all("tr")
-        data = []
-        for row in rows:
-            cells = row.find_all("td")
-            if len(cells) > 1:
-                data.append({
-                    "Symbol": cells[1].text.strip(),
-                    "LTP": cells[2].text.strip().replace(",", ""),
-                    "Change%": cells[4].text.strip(),
-                    "Day High": cells[6].text.strip().replace(",", ""),
-                    "Day Low": cells[7].text.strip().replace(",", ""),
-                    "Previous Close": cells[9].text.strip().replace(",", ""),
-                    "Volume": cells[8].text.strip().replace(",", "")
-                })
-        return data
-    except requests.RequestException as e:
-        logging.error(f"Error fetching live trading data: {e}")
-        return []
+    url = "https://www.sharesansar.com/live-trading"
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, "html.parser")
+    rows = soup.find_all("tr")
+    data = []
+    for row in rows:
+        cells = row.find_all("td")
+        if len(cells) > 1:
+            data.append({
+                "Symbol": cells[1].text.strip(),
+                "LTP": cells[2].text.strip().replace(",", ""),
+                "Change%": cells[4].text.strip(),
+                "Day High": cells[6].text.strip().replace(",", ""),
+                "Day Low": cells[7].text.strip().replace(",", ""),
+                "Previous Close": cells[9].text.strip().replace(",", ""),
+                "Volume": cells[8].text.strip().replace(",", "")
+            })
+    return data
 
 # Function to scrape today's share price summary
 def scrape_today_share_price():
-    try:
-        url = "https://www.sharesansar.com/today-share-price"
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an HTTPError for bad responses
-        soup = BeautifulSoup(response.content, "html.parser")
-        rows = soup.find_all("tr")
-        data = []
-        for row in rows:
-            cells = row.find_all("td")
-            if len(cells) > 1:
-                data.append({
-                    "SN": cells[0].text.strip(),
-                    "Symbol": cells[1].text.strip(),
-                    "Turnover": cells[10].text.strip().replace(",", ""),
-                    "52 Week High": cells[19].text.strip().replace(",", ""),
-                    "52 Week Low": cells[20].text.strip().replace(",", "")
-                })
-        return data
-    except requests.RequestException as e:
-        logging.error(f"Error fetching today's share price: {e}")
-        return []
+    url = "https://www.sharesansar.com/today-share-price"
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, "html.parser")
+    rows = soup.find_all("tr")
+    data = []
+    for row in rows:
+        cells = row.find_all("td")
+        if len(cells) > 1:
+            data.append({
+                "SN": cells[0].text.strip(),
+                "Symbol": cells[1].text.strip(),
+                "Turnover": cells[10].text.strip().replace(",", ""),
+                "52 Week High": cells[19].text.strip().replace(",", ""),
+                "52 Week Low": cells[20].text.strip().replace(",", "")
+            })
+    return data
 
 # Function to merge live and today's data
 def merge_data(live_data, today_data):
@@ -396,37 +381,24 @@ def generate_html(main_table):
 
 # Upload to FTP
 def upload_to_ftp(html_content):
-    try:
-        with open("index.html", "w", encoding="utf-8") as f:
-            f.write(html_content)
-        with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-            ftp.cwd("/htdocs")
-            with open("index.html", "rb") as f:
-                ftp.storbinary("STOR index.html", f)
-        logging.info("Successfully uploaded HTML content to FTP server.")
-    except ftplib.all_errors as e:
-        logging.error(f"FTP error: {e}")
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(html_content)
+    with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
+        ftp.cwd("/htdocs")
+        with open("index.html", "rb") as f:
+            ftp.storbinary("STOR index.html", f)
 
 # Refresh Data
 def refresh_data():
-    try:
-        logging.info("Starting data refresh...")
-        live_data = scrape_live_trading()
-        today_data = scrape_today_share_price()
-        merged_data = merge_data(live_data, today_data)
-        html_content = generate_html(merged_data)
-        upload_to_ftp(html_content)
-        logging.info("Data refresh completed successfully.")
-    except Exception as e:
-        logging.error(f"Error during data refresh: {e}")
+    live_data = scrape_live_trading()
+    today_data = scrape_today_share_price()
+    merged_data = merge_data(live_data, today_data)
+    html_content = generate_html(merged_data)
+    upload_to_ftp(html_content)
 
 # Scheduler
 scheduler = BackgroundScheduler()
-
-# Schedule the job to run every 5 minutes from Sunday to Thursday between 11:00 and 15:00
-trigger = CronTrigger(day_of_week='sun-thu', hour='11-15', minute='*/5')
-scheduler.add_job(refresh_data, trigger)
-
+scheduler.add_job(refresh_data, "interval", minutes=15)
 scheduler.start()
 
 # Initial Data Refresh
