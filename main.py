@@ -325,7 +325,7 @@ def generate_html(main_table):
     </head>
     <body>
         <h1>NEPSE Live Data</h1>
-        <h2>Welcome 🙏 to my Nepse Data website</h2>
+        <h2>Welcome 馃檹 to my Nepse Data website</h2>
         <div class="updated-time">
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
