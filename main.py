@@ -1,14 +1,12 @@
 import os
 import ftplib
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.combining import OrTrigger
-from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, render_template_string
 
 app = Flask(__name__)
 
@@ -196,6 +194,15 @@ def generate_html(main_table):
             .right {{
                 float: right;
             }}
+            .search-container {{
+                text-align: center;
+                margin-bottom: 20px;
+            }}
+            .search-container input {{
+                width: 300px;
+                padding: 10px;
+                font-size: 16px;
+            }}
             @media (max-width: 768px) {{
                 table {{
                     font-size: 12px;
@@ -270,23 +277,21 @@ def generate_html(main_table):
                 row.classList.add("highlight");
             }}
 
-            // Function to filter table based on search input
+            // Function to filter table rows based on search input
             function filterTable() {{
-                var input, filter, table, tr, td, i, j, txtValue;
-                input = document.getElementById("symbolSearch");
+                var input, filter, table, tr, td, i, txtValue;
+                input = document.getElementById("searchInput");
                 filter = input.value.toUpperCase();
                 table = document.getElementById("nepseTable");
                 tr = table.getElementsByTagName("tr");
                 for (i = 1; i < tr.length; i++) {{
-                    tr[i].style.display = "none";
-                    td = tr[i].getElementsByClassName("symbol");
-                    for (j = 0; j < td.length; j++) {{
-                        if (td[j]) {{
-                            txtValue = td[j].textContent || td[j].innerText;
-                            if (txtValue.toUpperCase().indexOf(filter) > -1) {{
-                                tr[i].style.display = "";
-                                break;
-                            }}
+                    td = tr[i].getElementsByTagName("td")[1];
+                    if (td) {{
+                        txtValue = td.textContent || td.innerText;
+                        if (txtValue.toUpperCase().indexOf(filter) > -1) {{
+                            tr[i].style.display = "";
+                        }} else {{
+                            tr[i].style.display = "none";
                         }}
                     }}
                 }}
@@ -295,14 +300,16 @@ def generate_html(main_table):
     </head>
     <body>
         <h1>NEPSE Live Data</h1>
-        <h2>Welcome 馃檹 to my Nepse Data website</h2>
+        <h2>Welcome 🙏 to my Nepse Data website</h2>
         <div class="updated-time">
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
         </div>
-        <div style="text-align: center; margin-bottom: 10px;">
-            <input type="text" id="symbolSearch" onkeyup="filterTable()" placeholder="Search for symbols..">
+
+        <div class="search-container">
+            <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search for symbols...">
         </div>
+
         <div class="table-container">
             <table id="nepseTable">
                 <thead>
@@ -327,11 +334,9 @@ def generate_html(main_table):
     for row in main_table:
         change_class = "light-red" if float(row["Change%"]) < 0 else (
             "light-green" if float(row["Change%"]) > 0 else "light-blue")
-        symbol_class = "light-red" if float(row["Change%"]) < 0 else (
-            "light-green" if float(row["Change%"]) > 0 else "light-blue")
         html += f"""
             <tr onclick="highlightRow(this)">
-                <td>{row["SN"]}</td><td class="symbol {symbol_class}">{row["Symbol"]}</td><td>{row["LTP"]}</td>
+                <td>{row["SN"]}</td><td class="symbol {change_class}">{row["Symbol"]}</td><td>{row["LTP"]}</td>
                 <td class="{change_class}">{row["Change%"]}</td><td>{row["Day High"]}</td>
                 <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
                 <td>{row["Volume"]}</td><td>{row["Turnover"]}</td>
@@ -368,9 +373,7 @@ def refresh_data():
 
 # Scheduler
 scheduler = BackgroundScheduler()
-trigger1 = OrTrigger([CronTrigger(day_of_week='sun-thu', hour='10-15', minute='*/10')])
-scheduler.add_job(refresh_data, trigger1)
-scheduler.add_job(refresh_data, CronTrigger(day_of_week='sun-thu', hour=15, minute=10))
+scheduler.add_job(refresh_data, "interval", minutes=15)
 scheduler.start()
 
 # Initial Data Refresh
