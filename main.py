@@ -1,13 +1,14 @@
 import os
-import ftplib
-import logging
+import asyncio
+import aiohttp
+import aioftp
+import aiofiles
 from apscheduler.schedulers.background import BackgroundScheduler
+from pytz import timezone
 from datetime import datetime
-import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from flask import Flask
-from pytz import timezone
+from flask import Flask, render_template_string
 
 app = Flask(__name__)
 
@@ -18,39 +19,41 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Initialize logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Initialize variables to track last updated data
-last_updated_data = None
-
 # Function to scrape live trading data
-def scrape_live_trading():
-    try:
-        url = "https://www.sharesansar.com/live-trading"
-        response = requests.get(url)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, "html.parser")
-        return parse_table(soup)
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to fetch live trading data: {e}")
-        return []
+async def scrape_live_trading():
+    url = "https://www.sharesansar.com/live-trading"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            content = await response.text()
+            soup = BeautifulSoup(content, "html.parser")
+            rows = soup.find_all("tr")
+            data = []
+            for row in rows:
+                cells = row.find_all("td")
+                if len(cells) > 1:
+                    data.append({
+                        "Symbol": cells[1].text.strip(),
+                        "LTP": cells[2].text.strip().replace(",", ""),
+                        "Change%": cells[4].text.strip(),
+                        "Day High": cells[6].text.strip().replace(",", ""),
+                        "Day Low": cells[7].text.strip().replace(",", ""),
+                        "Previous Close": cells[9].text.strip().replace(",", ""),
+                        "Volume": cells[8].text.strip().replace(",", "")
+                    })
+    return data
 
 # Function to scrape today's share price summary
-def scrape_today_share_price():
-    try:
-        url = "https://www.sharesansar.com/today-share-price"
-        response = requests.get(url)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, "html.parser")
-        rows = soup.find_all("tr")
-        data = []
-        for row in rows:
-            cells = row.find_all("td")
-            if len(cells) > 1:
-                # Log missing keys for debugging
-                try:
+async def scrape_today_share_price():
+    url = "https://www.sharesansar.com/today-share-price"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            content = await response.text()
+            soup = BeautifulSoup(content, "html.parser")
+            rows = soup.find_all("tr")
+            data = []
+            for row in rows:
+                cells = row.find_all("td")
+                if len(cells) > 1:
                     data.append({
                         "SN": cells[0].text.strip(),
                         "Symbol": cells[1].text.strip(),
@@ -58,54 +61,23 @@ def scrape_today_share_price():
                         "52 Week High": cells[19].text.strip().replace(",", ""),
                         "52 Week Low": cells[20].text.strip().replace(",", "")
                     })
-                except IndexError as e:
-                    logger.error(f"Error parsing row: {e}")
-        return data
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to fetch today's share price data: {e}")
-        return []
-
-# Helper function to parse table rows
-def parse_table(soup):
-    data = []
-    rows = soup.find_all("tr")
-    for row in rows:
-        cells = row.find_all("td")
-        if len(cells) > 1:
-            data.append({
-                "Symbol": cells[1].text.strip(),
-                "LTP": cells[2].text.strip().replace(",", ""),
-                "Change%": cells[4].text.strip(),
-                "Day High": cells[6].text.strip().replace(",", ""),
-                "Day Low": cells[7].text.strip().replace(",", ""),
-                "Previous Close": cells[9].text.strip().replace(",", ""),
-                "Volume": cells[8].text.strip().replace(",", "")
-            })
     return data
 
 # Function to merge live and today's data
 def merge_data(live_data, today_data):
     merged = []
     today_dict = {item["Symbol"]: item for item in today_data}
-
     for live in live_data:
         symbol = live["Symbol"]
         if symbol in today_dict:
             today = today_dict[symbol]
-            high = today.get("52 Week High", "N/A")
-            low = today.get("52 Week Low", "N/A")
+            high = today["52 Week High"]
+            low = today["52 Week Low"]
             ltp = live["LTP"]
-            
-            try:
-                down_from_high = (float(high) - float(ltp)) / float(high) * 100 if high != "N/A" and ltp != "N/A" else "N/A"
-                up_from_low = (float(ltp) - float(low)) / float(low) * 100 if low != "N/A" and ltp != "N/A" else "N/A"
-            except ValueError as e:
-                logger.error(f"Error calculating percentages for symbol {symbol}: {e}")
-                down_from_high = "N/A"
-                up_from_low = "N/A"
-
+            down_from_high = (float(high) - float(ltp)) / float(high) * 100 if high != "N/A" and ltp != "N/A" else "N/A"
+            up_from_low = (float(ltp) - float(low)) / float(low) * 100 if low != "N/A" and ltp != "N/A" else "N/A"
             merged.append({
-                "SN": today.get("SN", ""),
+                "SN": today["SN"],
                 "Symbol": symbol,
                 "LTP": live["LTP"],
                 "Change%": live["Change%"],
@@ -113,9 +85,9 @@ def merge_data(live_data, today_data):
                 "Day Low": live["Day Low"],
                 "Previous Close": live["Previous Close"],
                 "Volume": live["Volume"],
-                "Turnover": today.get("Turnover", "N/A"),
-                "52 Week High": high,
-                "52 Week Low": low,
+                "Turnover": today["Turnover"],
+                "52 Week High": today["52 Week High"],
+                "52 Week Low": today["52 Week Low"],
                 "Down From High (%)": f"{down_from_high:.2f}" if isinstance(down_from_high, float) else "N/A",
                 "Up From Low (%)": f"{up_from_low:.2f}" if isinstance(up_from_low, float) else "N/A"
             })
@@ -255,6 +227,107 @@ def generate_html(main_table):
                 }}
             }}
         </style>
+        <script>
+            function sortTable(n) {{
+                var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+                table = document.getElementById("nepseTable");
+                switching = true;
+                dir = "asc";
+                var headers = table.getElementsByTagName("TH");
+                for (var j = 0; j < headers.length; j++) {{
+                    headers[j].classList.remove("arrow", "desc");
+                }}
+                headers[n].classList.add("arrow");
+                while (switching) {{
+                    switching = false;
+                    rows = table.rows;
+                    for (i = 1; i < (rows.length - 1); i++) {{
+                        shouldSwitch = false;
+                        x = rows[i].getElementsByTagName("TD")[n];
+                        y = rows[i + 1].getElementsByTagName("TD")[n];
+                        let xValue = parseFloat(x.innerHTML.replace(/,/g, ''));
+                        let yValue = parseFloat(y.innerHTML.replace(/,/g, ''));
+                        if (isNaN(xValue)) xValue = x.innerHTML.toLowerCase();
+                        if (isNaN(yValue)) yValue = y.innerHTML.toLowerCase();
+                        if (dir === "asc") {{
+                            if (xValue > yValue) {{
+                                shouldSwitch = true;
+                                break;
+                            }}
+                        }} else if (dir === "desc") {{
+                            if (xValue < yValue) {{
+                                shouldSwitch = true;
+                                break;
+                            }}
+                        }}
+                    }}
+                    if (shouldSwitch) {{
+                        rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                        switching = true;
+                        switchcount++;
+                    }} else {{
+                        if (switchcount === 0 && dir === "asc") {{
+                            dir = "desc";
+                            headers[n].classList.add("desc");
+                            switching = true;
+                        }}
+                    }}
+                }}
+            }}
+
+            // Function to highlight a row when a symbol is clicked
+            function highlightRow(row) {{
+                var rows = document.getElementById("nepseTable").rows;
+                for (var i = 1; i < rows.length; i++) {{
+                    rows[i].classList.remove("highlight");
+                }}
+                row.classList.add("highlight");
+            }}
+
+            // Function to filter table rows based on search input
+            function filterTable() {{
+                var input, filter, table, tr, td, i, txtValue;
+                input = document.getElementById("searchInput");
+                filter = input.value.toUpperCase();
+                table = document.getElementById("nepseTable");
+                tr = table.getElementsByTagName("tr");
+                for (i = 1; i < tr.length; i++) {{
+                    td = tr[i].getElementsByTagName("td")[1];
+                    if (td) {{
+                        txtValue = td.textContent || td.innerText;
+                        if (txtValue.toUpperCase().indexOf(filter) > -1) {{
+                            tr[i].style.display = "";
+                        }} else {{
+                            tr[i].style.display = "none";
+                        }}
+                    }}
+                }}
+            }}
+
+            // Function to change background color of Symbol column based on Change%
+            function updateSymbolColors() {{
+                var table = document.getElementById("nepseTable");
+                var rows = table.getElementsByTagName("tr");
+                for (var i = 1; i < rows.length; i++) {{
+                    var changeCell = rows[i].getElementsByTagName("td")[3];
+                    var symbolCell = rows[i].getElementsByTagName("td")[1];
+                    if (changeCell) {{
+                        var changeValue = parseFloat(changeCell.innerText);
+                        if (changeValue < 0) {{
+                            symbolCell.style.backgroundColor = "#FFCCCB"; // Light red
+                        }} else if (changeValue > 0) {{
+                            symbolCell.style.backgroundColor = "#D4EDDA"; // Light green
+                        }} else {{
+                            symbolCell.style.backgroundColor = "#CCE5FF"; // Light blue
+                        }}
+                    }}
+                }}
+            }}
+
+            window.onload = function() {{
+                updateSymbolColors();
+            }};
+        </script>
     </head>
     <body>
         <h1>NEPSE Live Data</h1>
@@ -313,37 +386,35 @@ def generate_html(main_table):
     return html
 
 # Upload to FTP
-def upload_to_ftp(html_content):
-    try:
-        with open("index.html", "w", encoding="utf-8") as f:
-            f.write(html_content)
-        with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-            ftp.cwd("/htdocs")
-            with open("index.html", "rb") as f:
-                ftp.storbinary("STOR index.html", f)
-    except Exception as e:
-        logger.error(f"Failed to upload to FTP: {e}")
+async def upload_to_ftp(html_content):
+    async with aiofiles.open("index.html", "w", encoding="utf-8") as f:
+        await f.write(html_content)
+    async with aioftp.Client.context(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
+        await ftp.change_directory("/htdocs")
+        async with aiofiles.open("index.html", "rb") as f:
+            await ftp.upload_stream(f, "index.html")
 
-# Refresh Data for live session
-def refresh_data():
-    global last_updated_data
-    live_data = scrape_live_trading()
-    today_data = scrape_today_share_price()
+# Refresh Data
+async def refresh_data():
+    live_data = await scrape_live_trading()
+    today_data = await scrape_today_share_price()
     merged_data = merge_data(live_data, today_data)
-    last_updated_data = merged_data
     html_content = generate_html(merged_data)
-    upload_to_ftp(html_content)
+    await upload_to_ftp(html_content)
 
 # Scheduler
 scheduler = BackgroundScheduler()
-scheduler.add_job(refresh_data, 'interval', minutes=5, start_date="2024-12-28 11:00:00", end_date="2024-12-28 15:00:00", timezone="Asia/Kathmandu")
-scheduler.add_job(lambda: generate_html(last_updated_data), 'interval', days=1, start_date="2024-12-28 15:00:00", timezone="Asia/Kathmandu")
+scheduler.add_job(refresh_data, "interval", minutes=5)
 scheduler.start()
 
 # Initial Data Refresh
-refresh_data()
+asyncio.run(refresh_data()
 
+# Flask route to show data
+@app.route("/")
+def home():
+    return "NEPSE data is being refreshed and uploaded."
+    
 # Keep Running
 if __name__ == "__main__":
-    logger.info("Starting Flask app...")
     app.run(host="0.0.0.0", port=PORT)
