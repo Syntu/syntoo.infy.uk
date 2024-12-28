@@ -1,14 +1,12 @@
 import os
 import ftplib
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.combining import OrTrigger
-from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from flask import Flask, send_from_directory
+from flask import Flask
 
 app = Flask(__name__)
 
@@ -90,29 +88,167 @@ def merge_data(live_data, today_data):
     return merged
 
 # Function to generate HTML
-def generate_html(main_table, updated_time):
-    with open('template.html', 'r', encoding='utf-8') as file:
-        template = file.read()
-
-    table_rows = ''
+def generate_html(main_table):
+    updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>NEPSE Live Data</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; }}
+            h1 {{
+                text-align: center;
+                font-size: 40px;
+                font-weight: bold;
+                margin-top: 20px;
+            }}
+            h2 {{
+                text-align: center;
+                font-size: 14px;
+                margin-bottom: 20px;
+            }}
+            .search-container {{
+                text-align: center;
+                margin-bottom: 20px;
+            }}
+            .search-container input[type="text"] {{
+                width: 60%;
+                padding: 8px;
+                font-size: 16px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }}
+            .table-container {{
+                margin: 0 auto;
+                width: 95%;
+                overflow-x: auto;
+                overflow-y: auto;
+                height: 600px; /* Adjust as needed */
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+                font-size: 14px;
+            }}
+            th, td {{
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: center;
+            }}
+            th {{
+                background-color: #8B4513;
+                color: white;
+                position: sticky;
+                top: 0;
+                z-index: 2;
+                cursor: pointer;
+                white-space: nowrap;
+            }}
+            tr:nth-child(even) {{
+                background-color: #f9f9f9;
+            }}
+            .symbol {{ 
+                color: #1e90ff;
+                font-weight: bold;
+            }}
+            .footer {{
+                text-align: right;
+                padding: 10px;
+                font-size: 12px;
+                color: gray;
+            }}
+            .footer a {{
+                color: inherit;
+                text-decoration: none;
+            }}
+            .updated-time {{
+                font-size: 14px;
+                margin-top: 10px;
+            }}
+        </style>
+        <script>
+            function searchSymbol() {{
+                var input, filter, table, tr, td, i, txtValue;
+                input = document.getElementById("symbolSearch");
+                filter = input.value.toUpperCase();
+                table = document.getElementById("nepseTable");
+                tr = table.getElementsByTagName("tr");
+                for (i = 1; i < tr.length; i++) {{
+                    td = tr[i].getElementsByTagName("td")[1];
+                    if (td) {{
+                        txtValue = td.textContent || td.innerText;
+                        if (txtValue.toUpperCase().indexOf(filter) > -1) {{
+                            tr[i].style.display = "";
+                        }} else {{
+                            tr[i].style.display = "none";
+                        }}
+                    }}
+                }}
+            }}
+        </script>
+    </head>
+    <body>
+        <h1>NEPSE Live Data</h1>
+        <h2>Welcome 🙏 to my Nepse Data website</h2>
+        <div class="updated-time">
+            <div>Updated on: {updated_time}</div>
+        </div>
+        <div class="search-container">
+            <input type="text" id="symbolSearch" onkeyup="searchSymbol()" placeholder="Search for symbols..">
+        </div>
+        <div class="table-container">
+            <table id="nepseTable">
+                <thead>
+                    <tr>
+                        <th>SN</th>
+                        <th>Symbol</th>
+                        <th>LTP</th>
+                        <th>Change%</th>
+                        <th>Day High</th>
+                        <th>Day Low</th>
+                        <th>Previous Close</th>
+                        <th>Volume</th>
+                        <th>Turnover</th>
+                        <th>52 Week High</th>
+                        <th>52 Week Low</th>
+                        <th>Down From High (%)</th>
+                        <th>Up From Low (%)</th>
+                    </tr>
+                </thead>
+                <tbody>
+    """
     for row in main_table:
         change_class = "light-red" if float(row["Change%"]) < 0 else (
             "light-green" if float(row["Change%"]) > 0 else "light-blue")
-        symbol_class = "light-red" if float(row["Change%"]) < 0 else (
-            "light-green" if float(row["Change%"]) > 0 else "light-blue")
-        table_rows += f"""
-            <tr onclick="highlightRow(this)">
-                <td>{row["SN"]}</td><td class="symbol {symbol_class}">{row["Symbol"]}</td><td>{row["LTP"]}</td>
-                <td class="{change_class}">{row["Change%"]}</td><td>{row["Day High"]}</td>
-                <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
-                <td>{row["Volume"]}</td><td>{row["Turnover"]}</td>
-                <td>{row["52 Week High"]}</td><td>{row["52 Week Low"]}</td>
-                <td>{row["Down From High (%)"]}</td><td>{row["Up From Low (%)"]}</td>
+        html += f"""
+            <tr>
+                <td>{row["SN"]}</td>
+                <td class="symbol">{row["Symbol"]}</td>
+                <td>{row["LTP"]}</td>
+                <td class="{change_class}">{row["Change%"]}</td>
+                <td>{row["Day High"]}</td>
+                <td>{row["Day Low"]}</td>
+                <td>{row["Previous Close"]}</td>
+                <td>{row["Volume"]}</td>
+                <td>{row["Turnover"]}</td>
+                <td>{row["52 Week High"]}</td>
+                <td>{row["52 Week Low"]}</td>
+                <td>{row["Down From High (%)"]}</td>
+                <td>{row["Up From Low (%)"]}</td>
             </tr>
         """
-
-    html_content = template.format(updated_time=updated_time, table_rows=table_rows)
-    return html_content
+    html += """
+        </tbody>
+        </table>
+    </div>
+    </body>
+    </html>
+    """
+    return html
 
 # Upload to FTP
 def upload_to_ftp(html_content):
@@ -122,7 +258,7 @@ def upload_to_ftp(html_content):
         ftp.cwd("/htdocs")
         with open("index.html", "rb") as f:
             ftp.storbinary("STOR index.html", f)
-
+            
 # Refresh Data
 def refresh_data():
     live_data = scrape_live_trading()
