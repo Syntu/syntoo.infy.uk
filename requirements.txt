@@ -8,3 +8,4 @@ asyncio
 aiohttp
 aioftp
 aiofiles
+certifi
