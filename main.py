@@ -87,90 +87,144 @@ def merge_data(live_data, today_data):
             })
     return merged
 
-# Function to generate HTML
-def generate_html(main_table):
-    updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
-    html = f"""<!DOCTYPE html>
+
+@app.route("/")
+def index():
+    live_data = scrape_live_trading()
+    today_data = scrape_today_share_price()
+    merged_data = merge_data(live_data, today_data)
+
+    template = """
+    <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>NEPSE Live Data</title>
+        <title>Trading Data</title>
+        <style>
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            th {
+                position: sticky;
+                top: 0;
+                background-color: brown;
+                color: white;
+                cursor: pointer;
+            }
+            th, td {
+                padding: 8px;
+                text-align: left;
+                border: 1px solid #ddd;
+            }
+            tr:hover {
+                background-color: #f5f5f5;
+            }
+            .negative {
+                background-color: lightcoral;
+            }
+            .positive {
+                background-color: lightgreen;
+            }
+            .neutral {
+                background-color: lightblue;
+            }
+            .highlight {
+                background-color: yellow;
+            }
+        </style>
     </head>
     <body>
-        <h1>NEPSE Live Data</h1>
-        <p>Updated on: {updated_time}</p>
-        <table border="1">
+        <table id="tradingTable">
             <thead>
                 <tr>
-                    <th>SN</th>
-                    <th>Symbol</th>
-                    <th>LTP</th>
-                    <th>Change%</th>
-                    <th>Day High</th>
-                    <th>Day Low</th>
-                    <th>Previous Close</th>
-                    <th>Volume</th>
-                    <th>Turnover</th>
-                    <th>52 Week High</th>
-                    <th>52 Week Low</th>
-                    <th>Down From High (%)</th>
-                    <th>Up From Low (%)</th>
+                    <th onclick="sortTable(0)">SN</th>
+                    <th onclick="sortTable(1)">Symbol</th>
+                    <th onclick="sortTable(2)">LTP</th>
+                    <th onclick="sortTable(3)">Change%</th>
+                    <th onclick="sortTable(4)">Day High</th>
+                    <th onclick="sortTable(5)">Day Low</th>
+                    <th onclick="sortTable(6)">Previous Close</th>
+                    <th onclick="sortTable(7)">Volume</th>
+                    <th onclick="sortTable(8)">Turnover</th>
+                    <th onclick="sortTable(9)">52 Week High</th>
+                    <th onclick="sortTable(10)">52 Week Low</th>
+                    <th onclick="sortTable(11)">Down From High (%)</th>
+                    <th onclick="sortTable(12)">Up From Low (%)</th>
                 </tr>
             </thead>
             <tbody>
-    """
-    for row in main_table:
-        html += f"""
-            <tr>
-                <td>{row["SN"]}</td>
-                <td>{row["Symbol"]}</td>
-                <td>{row["LTP"]}</td>
-                <td>{row["Change%"]}</td>
-                <td>{row["Day High"]}</td>
-                <td>{row["Day Low"]}</td>
-                <td>{row["Previous Close"]}</td>
-                <td>{row["Volume"]}</td>
-                <td>{row["Turnover"]}</td>
-                <td>{row["52 Week High"]}</td>
-                <td>{row["52 Week Low"]}</td>
-                <td>{row["Down From High (%)"]}</td>
-                <td>{row["Up From Low (%)"]}</td>
-            </tr>
-        """
-    html += """
+                {% for row in merged_data %}
+                <tr class="{{ 'negative' if row['Change%'].startswith('-') else 'positive' if row['Change%'] != '0.00' else 'neutral' }}">
+                    <td>{{ row['SN'] }}</td>
+                    <td>{{ row['Symbol'] }}</td>
+                    <td>{{ row['LTP'] }}</td>
+                    <td>{{ row['Change%'] }}</td>
+                    <td>{{ row['Day High'] }}</td>
+                    <td>{{ row['Day Low'] }}</td>
+                    <td>{{ row['Previous Close'] }}</td>
+                    <td>{{ row['Volume'] }}</td>
+                    <td>{{ row['Turnover'] }}</td>
+                    <td>{{ row['52 Week High'] }}</td>
+                    <td>{{ row['52 Week Low'] }}</td>
+                    <td>{{ row['Down From High (%)'] }}</td>
+                    <td>{{ row['Up From Low (%)'] }}</td>
+                </tr>
+                {% endfor %}
             </tbody>
         </table>
+        <script>
+            // Sort table function
+            function sortTable(n) {
+                var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+                table = document.getElementById("tradingTable");
+                switching = true;
+                dir = "asc"; 
+                while (switching) {
+                    switching = false;
+                    rows = table.rows;
+                    for (i = 1; i < (rows.length - 1); i++) {
+                        shouldSwitch = false;
+                        x = rows[i].getElementsByTagName("TD")[n];
+                        y = rows[i + 1].getElementsByTagName("TD")[n];
+                        if (dir == "asc") {
+                            if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
+                                shouldSwitch = true;
+                                break;
+                            }
+                        } else if (dir == "desc") {
+                            if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
+                                shouldSwitch = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (shouldSwitch) {
+                        rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                        switching = true;
+                        switchcount++;
+                    } else {
+                        if (switchcount == 0 && dir == "asc") {
+                            dir = "desc";
+                            switching = true;
+                        }
+                    }
+                }
+            }
+
+            // Highlight row on click
+            document.querySelectorAll("#tradingTable tbody tr").forEach(row => {
+                row.addEventListener("click", () => {
+                    document.querySelectorAll("#tradingTable tbody tr").forEach(r => r.classList.remove("highlight"));
+                    row.classList.add("highlight");
+                });
+            });
+        </script>
     </body>
     </html>
     """
-    return html
+    return render_template_string(template, merged_data=merged_data)
 
-# Upload to FTP
-def upload_to_ftp(html_content):
-    with open("index.html", "w", encoding="utf-8") as f:
-        f.write(html_content)
-    with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-        ftp.cwd("/htdocs")
-        with open("index.html", "rb") as f:
-            ftp.storbinary("STOR index.html", f)
-
-# Refresh Data
-def refresh_data():
-    live_data = scrape_live_trading()
-    today_data = scrape_today_share_price()
-    merged_data = merge_data(live_data, today_data)
-    html_content = generate_html(merged_data)
-    upload_to_ftp(html_content)
-
-# Scheduler
-scheduler = BackgroundScheduler()
-scheduler.add_job(refresh_data, "interval", minutes=15)
-scheduler.start()
-
-# Initial Data Refresh
-refresh_data()
-
-# Keep Running
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT)
+    app.run(port=PORT)
