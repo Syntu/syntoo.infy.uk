@@ -1,112 +1,84 @@
 import os
-import ftplib
-from apscheduler.schedulers.background import BackgroundScheduler
-from pytz import timezone
-from datetime import datetime
+import time
 import requests
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from telegram import Bot, Update
+from telegram.ext import Updater, CommandHandler, CallbackContext
+from flask import Flask
 
 # Load environment variables
 load_dotenv()
-FTP_HOST = os.getenv("FTP_HOST")
-FTP_USER = os.getenv("FTP_USER")
-FTP_PASS = os.getenv("FTP_PASS")
 
-def scrape_nepse_data():
-    url = "https://nepsealpha.com/live-market/"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, "html.parser")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+API_URL = os.getenv("API_URL")
 
-    # Extract data
-    try:
-        table = soup.find("table", {"class": "table-market-summary"})
-        rows = table.find_all("tr")
+# Initialize bot
+bot = Bot(token=BOT_TOKEN)
 
-        data = {
-            "Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "Current": rows[1].find_all("td")[1].text.strip(),
-            "Daily Gain": rows[2].find_all("td")[1].text.strip(),
-            "Total Turnover": rows[3].find_all("td")[1].text.strip(),
-            "Total Traded Share": rows[4].find_all("td")[1].text.strip(),
-            "Total Transactions": rows[5].find_all("td")[1].text.strip(),
-            "Total Scrips Traded": rows[6].find_all("td")[1].text.strip(),
-            "Total Float Market Capitalization Rs": rows[7].find_all("td")[1].text.strip(),
-            "NEPSE Market Cap": rows[8].find_all("td")[1].text.strip()
-        }
-    except Exception as e:
-        print("Error while scraping:", e)
+def fetch_data():
+    response = requests.get(API_URL)
+    if response.status_code == 200:
+        return response.json()  # Assuming the API returns JSON data
+    else:
         return None
 
-    return data
+def format_data(data):
+    # Format the data received from API to a readable string
+    formatted_data = (
+        f"Data for Symbol\n\n"
+        f"LTP: {data.get('LTP')}\n"
+        f"Change Point: {data.get('Change Point')}\n"
+        f"Day High: {data.get('Day High')}\n"
+        f"Day Low: {data.get('Day Low')}\n"
+        f"Previous Close: {data.get('Previous Close')}\n"
+        f"Volume: {data.get('Volume')}\n"
+        f"Turn Over: {data.get('Turn Over')}\n"
+        f"52 Week High: {data.get('52 Week High')}\n"
+        f"52 Week Low: {data.get('52 Week Low')}\n"
+        f"Down From 52 Week High: {data.get('Down From 52 Week High')}\n"
+        f"Up From 52 Week Low: {data.get('Up From 52 Week Low')}\n"
+    )
+    return formatted_data
 
-def generate_html(data):
-    # Determine Daily Gain color
-    daily_gain = float(data["Daily Gain"].replace(",", "").strip())
-    if daily_gain > 0:
-        color = "green"
-    elif daily_gain < 0:
-        color = "red"
-    else:
-        color = "blue"
-
-    # HTML Template
-    html_content = f"""
-    <html>
-    <head>
-        <title>NEPSE Market Summary</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; }}
-            .gain {{ color: {color}; }}
-        </style>
-    </head>
-    <body>
-        <h1>NEPSE Market Summary</h1>
-        <p>Date: {data['Date']}</p>
-        <p>Current: {data['Current']}</p>
-        <p class="gain">Daily Gain: {data['Daily Gain']}</p>
-        <p>Total Turnover: {data['Total Turnover']}</p>
-        <p>Total Traded Share: {data['Total Traded Share']}</p>
-        <p>Total Transactions: {data['Total Transactions']}</p>
-        <p>Total Scrips Traded: {data['Total Scrips Traded']}</p>
-        <p>Total Float Market Capitalization Rs: {data['Total Float Market Capitalization Rs']}</p>
-        <p>NEPSE Market Cap: {data['NEPSE Market Cap']}</p>
-    </body>
-    </html>
-    """
-    return html_content
-
-def upload_to_ftp(html_content):
-    try:
-        with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-            with open("nepse_summary.html", "w") as file:
-                file.write(html_content)
-
-            with open("nepse_summary.html", "rb") as file:
-                ftp.storbinary("STOR nepse_summary.html", file)
-
-        print("File uploaded successfully.")
-    except Exception as e:
-        print("FTP upload error:", e)
-
-def update_nepse_summary():
-    data = scrape_nepse_data()
+def send_message():
+    data = fetch_data()
     if data:
-        html_content = generate_html(data)
-        upload_to_ftp(html_content)
+        message = format_data(data)
+        bot.send_message(chat_id=CHAT_ID, text=message)
+    else:
+        bot.send_message(chat_id=CHAT_ID, text="Failed to fetch data from API.")
 
-# Scheduler to run the script every 5 minutes
-scheduler = BackgroundScheduler(timezone=timezone("Asia/Kathmandu"))
-scheduler.add_job(update_nepse_summary, "interval", minutes=5)
-scheduler.start()
+def start(update: Update, context: CallbackContext) -> None:
+    update.message.reply_text('Welcome to the NEPSE Telegram Bot!')
 
-if __name__ == "__main__":
-    # Run Flask server if needed (optional for testing purposes)
-    from flask import Flask
-    app = Flask(__name__)
+def main():
+    updater = Updater(BOT_TOKEN, use_context=True)
+    dispatcher = updater.dispatcher
 
-    @app.route("/")
-    def home():
-        return "<h1>NEPSE Summary Scraper Running...</h1>"
+    # Add command handler for /start
+    dispatcher.add_handler(CommandHandler("start", start))
 
-    app.run(port=int(os.getenv("PORT", 5000)))
+    # Start the bot
+    updater.start_polling()
+    updater.idle()
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Telegram Bot is running."
+
+if __name__ == '__main__':
+    # Start the bot in a separate thread
+    import threading
+    bot_thread = threading.Thread(target=main)
+    bot_thread.start()
+
+    # Start Flask server
+    app.run(host='0.0.0.0', port=5000)
+    
+    # Schedule data fetching and sending message every hour
+    while True:
+        send_message()
+        time.sleep(3600)  # Sleep for 1 hour
