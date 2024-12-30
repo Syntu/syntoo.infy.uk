@@ -57,34 +57,31 @@ def scrape_today_share_price():
             })
     return data
 
-# Function to scrape additional Nepse data
-def scrape_nepse_additional_data():
+# Function to scrape NEPSE summary data
+def scrape_nepse_summary():
     url = "https://nepalipaisa.com/live-market"
     response = requests.get(url)
     soup = BeautifulSoup(response.content, "html.parser")
-    data = {}
-    nepse_point = soup.find("div", {"id": "nepse-point"})
-    data["Nepse Point"] = nepse_point.text.strip() if nepse_point else "N/A"
-    
-    change_point = soup.find("div", {"id": "change-point"})
-    data["Change Point"] = change_point.text.strip() if change_point else "N/A"
-    
-    change_percent = soup.find("div", {"id": "change-percent"})
-    data["Change Percent"] = change_percent.text.strip() if change_percent else "N/A"
-    
-    as_of_date = soup.find("div", {"id": "as-of-date"})
-    data["As of Date"] = as_of_date.text.strip() if as_of_date else "N/A"
-    
-    total_turnover = soup.find("div", {"id": "total-turnover"})
-    data["Total Turnover"] = total_turnover.text.strip() if total_turnover else "N/A"
-    
-    total_volume = soup.find("div", {"id": "total-volume"})
-    data["Total Volume"] = total_volume.text.strip() if total_volume else "N/A"
-    
-    total_txn = soup.find("div", {"id": "total-txn"})
-    data["Total Txn"] = total_txn.text.strip() if total_txn else "N/A"
-    
-    return data
+    summary_data = []
+    nepse_point = soup.find("span", {"id": "nepse-point"}).text.strip()
+    change_point = soup.find("span", {"id": "change-point"}).text.strip()
+    change_percent = soup.find("span", {"id": "change-percent"}).text.strip()
+    as_of_date = soup.find("span", {"id": "as-of-date"}).text.strip()
+    total_turnover = soup.find("span", {"id": "total-turnover"}).text.strip()
+    total_volume = soup.find("span", {"id": "total-volume"}).text.strip()
+    total_txn = soup.find("span", {"id": "total-txn"}).text.strip()
+
+    summary_data.append({
+        "Nepse Point": nepse_point,
+        "Change Point": change_point,
+        "Change Percent": change_percent,
+        "As of Date": as_of_date,
+        "Total Turnover": total_turnover,
+        "Total Volume": total_volume,
+        "Total Txn": total_txn
+    })
+
+    return summary_data
 
 # Function to merge live and today's data
 def merge_data(live_data, today_data):
@@ -117,19 +114,34 @@ def merge_data(live_data, today_data):
     return merged
 
 # Function to generate HTML
-def generate_html(main_table, additional_data):
+def generate_html(main_table, summary_data):
     updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
-    additional_data_html = f"""
+    summary_html = f"""
     <table>
-        <tr><th>Nepse Point</th><td>{additional_data.get("Nepse Point", "N/A")}</td></tr>
-        <tr><th>Change Point</th><td>{additional_data.get("Change Point", "N/A")}</td></tr>
-        <tr><th>Change Percent</th><td>{additional_data.get("Change Percent", "N/A")}</td></tr>
-        <tr><th>As of Date</th><td>{additional_data.get("As of Date", "N/A")}</td></tr>
-        <tr><th>Total Turnover</th><td>{additional_data.get("Total Turnover", "N/A")}</td></tr>
-        <tr><th>Total Volume</th><td>{additional_data.get("Total Volume", "N/A")}</td></tr>
-        <tr><th>Total Txn</th><td>{additional_data.get("Total Txn", "N/A")}</td></tr>
-    </table>
+        <tr>
+            <th>Nepse Point</th>
+            <th>Change Point</th>
+            <th>Change Percent</th>
+            <th>As of Date</th>
+            <th>Total Turnover</th>
+            <th>Total Volume</th>
+            <th>Total Txn</th>
+        </tr>
     """
+    for item in summary_data:
+        summary_html += f"""
+        <tr>
+            <td>{item["Nepse Point"]}</td>
+            <td>{item["Change Point"]}</td>
+            <td>{item["Change Percent"]}</td>
+            <td>{item["As of Date"]}</td>
+            <td>{item["Total Turnover"]}</td>
+            <td>{item["Total Volume"]}</td>
+            <td>{item["Total Txn"]}</td>
+        </tr>
+        """
+    summary_html += "</table>"
+
     html = f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -364,9 +376,9 @@ def generate_html(main_table, additional_data):
         </script>
     </head>
     <body>
-        <div style="text-align: center; font-size: 12px; margin-top: 10px;">Welcome to my website</div>
+        <h2>Welcome to my website</h2>
         <h1>NEPSE Live Data</h1>
-        {additional_data_html}
+        {summary_html}
         <div class="updated-time">
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
@@ -433,9 +445,9 @@ def upload_to_ftp(html_content):
 def refresh_data():
     live_data = scrape_live_trading()
     today_data = scrape_today_share_price()
-    additional_data = scrape_nepse_additional_data()
+    summary_data = scrape_nepse_summary()
     merged_data = merge_data(live_data, today_data)
-    html_content = generate_html(merged_data, additional_data)
+    html_content = generate_html(merged_data, summary_data)
     upload_to_ftp(html_content)
 
 # Scheduler
@@ -448,3 +460,23 @@ def schedule_jobs():
     day_of_week = now.weekday()  # Monday is 0 and Sunday is 6
 
     # Check if the current day is Sunday to Thursday and time is between 11:00 and 15:00
+    if day_of_week in range(5) and time(11, 0) <= current_time <= time(15, 0):
+        scheduler.add_job(refresh_data, "interval", minutes=5)
+    else:
+        # Schedule a job to run once at 15:00 to refresh data outside the trading hours
+        next_run_time = datetime.combine(now.date(), time(15, 0))
+        if now.time() > time(15, 0):
+            next_run_time = next_run_time + timedelta(days=1)
+        scheduler.add_job(refresh_data, "date", run_date=next_run_time)
+
+# Initial scheduling
+schedule_jobs()
+
+scheduler.start()
+
+# Initial Data Refresh
+refresh_data()
+
+# Keep Running
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=PORT)
