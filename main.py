@@ -6,7 +6,7 @@ from datetime import datetime, time, timedelta
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from flask import Flask, render_template_string
+from flask import Flask
 
 app = Flask(__name__)
 
@@ -120,7 +120,7 @@ def generate_html(main_table, summary_data):
     summary_table = ""
     if summary_data:
         summary_table = f"""
-        <table border="1" cellpadding="5" cellspacing="0" style="margin: 0 auto; width: 95%; font-size: 14px; border-collapse: collapse;">
+        <table>
             <tr><th>Nepse Point</th><td>{summary_data['nepse_point']}</td></tr>
             <tr><th>Change Point</th><td>{summary_data['change_point']}</td></tr>
             <tr><th>Change Percent</th><td>{summary_data['change_percent']}</td></tr>
@@ -460,4 +460,15 @@ def schedule_jobs():
         # Schedule a job to run once at 15:00 to refresh data outside the trading hours
         next_run_time = datetime.combine(now.date(), time(15, 0))
         if now.time() > time(15, 0):
-            next_run_time = next_run_time + timedelta(days
+            next_run_time = next_run_time + timedelta(days=1)
+        scheduler.add_job(refresh_data, "date", run_date=next_run_time)
+
+# Initial scheduling
+schedule_jobs()
+
+scheduler.start()
+
+# Initial Data Refresh
+refresh_data()
+
+# Keep Running
