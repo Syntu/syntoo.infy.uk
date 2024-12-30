@@ -120,7 +120,7 @@ def generate_html(main_table, summary_data):
     summary_table = ""
     if summary_data:
         summary_table = f"""
-        <table>
+        <table border="1" cellpadding="5" cellspacing="0" style="margin: 0 auto; width: 95%; font-size: 14px; border-collapse: collapse;">
             <tr><th>Nepse Point</th><td>{summary_data['nepse_point']}</td></tr>
             <tr><th>Change Point</th><td>{summary_data['change_point']}</td></tr>
             <tr><th>Change Percent</th><td>{summary_data['change_percent']}</td></tr>
@@ -460,9 +460,4 @@ def schedule_jobs():
         # Schedule a job to run once at 15:00 to refresh data outside the trading hours
         next_run_time = datetime.combine(now.date(), time(15, 0))
         if now.time() > time(15, 0):
-            next_run_time = next_run_time + timedelta(days=1)
-schedule_jobs()
-
-scheduler.start()
-    if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT)
+            next_run_time = next_run_time + timedelta(days
