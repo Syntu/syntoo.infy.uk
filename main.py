@@ -57,7 +57,7 @@ def scrape_today_share_price():
             })
     return data
 
-# Function to scrape NEPSE summary data
+# Function to scrape Nepse summary
 def scrape_nepse_summary():
     url = "https://nepalipaisa.com/live-market"
     response = requests.get(url)
@@ -458,14 +458,11 @@ def schedule_jobs():
         scheduler.add_job(refresh_data, "interval", minutes=5)
     else:
         # Schedule a job to run once at 15:00 to refresh data outside the trading hours
-        next_run_time = datetime.combine(now.date(), time
-# Initial scheduling
+        next_run_time = datetime.combine(now.date(), time(15, 0))
+        if now.time() > time(15, 0):
+            next_run_time = next_run_time + timedelta(days=1)
 schedule_jobs()
+
 scheduler.start()
-
-# Initial Data Refresh
-refresh_data()
-
-# Keep Running
-if __name__ == "__main__":
+    if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT)
