@@ -95,9 +95,9 @@ def update_nepse_summary():
         html_content = generate_html(data)
         upload_to_ftp(html_content)
 
-# Scheduler to run the script every hour
+# Scheduler to run the script every 5 minutes
 scheduler = BackgroundScheduler(timezone=timezone("Asia/Kathmandu"))
-scheduler.add_job(update_nepse_summary, "interval", hours=1)
+scheduler.add_job(update_nepse_summary, "interval", minutes=5)
 scheduler.start()
 
 if __name__ == "__main__":
