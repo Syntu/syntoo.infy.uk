@@ -1,78 +1,112 @@
+import os
+import ftplib
+from apscheduler.schedulers.background import BackgroundScheduler
+from pytz import timezone
+from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
+from dotenv import load_dotenv
 
-# Website URL
-url = "https://nepsealpha.com/live-market/"
+# Load environment variables
+load_dotenv()
+FTP_HOST = os.getenv("FTP_HOST")
+FTP_USER = os.getenv("FTP_USER")
+FTP_PASS = os.getenv("FTP_PASS")
 
-# Send request and parse data
-response = requests.get(url)
-soup = BeautifulSoup(response.content, 'html.parser')
+def scrape_nepse_data():
+    url = "https://nepsealpha.com/live-market/"
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, "html.parser")
 
-# Function to get text or default
-def get_text_or_default(element, default="N/A"):
-    return element.text.strip() if element else default
+    # Extract data
+    try:
+        table = soup.find("table", {"class": "table-market-summary"})
+        rows = table.find_all("tr")
 
-# Extract data
-market_summary = soup.find('div', {'class': 'market-summary'})
+        data = {
+            "Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Current": rows[1].find_all("td")[1].text.strip(),
+            "Daily Gain": rows[2].find_all("td")[1].text.strip(),
+            "Total Turnover": rows[3].find_all("td")[1].text.strip(),
+            "Total Traded Share": rows[4].find_all("td")[1].text.strip(),
+            "Total Transactions": rows[5].find_all("td")[1].text.strip(),
+            "Total Scrips Traded": rows[6].find_all("td")[1].text.strip(),
+            "Total Float Market Capitalization Rs": rows[7].find_all("td")[1].text.strip(),
+            "NEPSE Market Cap": rows[8].find_all("td")[1].text.strip()
+        }
+    except Exception as e:
+        print("Error while scraping:", e)
+        return None
 
-# Parse individual data points
-date = datetime.now().strftime('%Y-%m-%d')
-current = get_text_or_default(market_summary.find('span', {'class': 'current-index'}))
-daily_gain = get_text_or_default(market_summary.find('span', {'class': 'daily-gain'}))
-total_turnover = get_text_or_default(market_summary.find('span', {'id': 'total-turnover'}))
-total_traded_share = get_text_or_default(market_summary.find('span', {'id': 'total-traded-share'}))
-total_transactions = get_text_or_default(market_summary.find('span', {'id': 'total-transactions'}))
-total_scrips_traded = get_text_or_default(market_summary.find('span', {'id': 'total-scrips-traded'}))
-float_market_cap = get_text_or_default(market_summary.find('span', {'id': 'float-market-cap'}))
-nepse_market_cap = get_text_or_default(market_summary.find('span', {'id': 'nepse-market-cap'}))
+    return data
 
-# Determine daily gain color
-if daily_gain.startswith('-'):
-    daily_gain_color = "red"
-elif daily_gain == "0" or daily_gain == "0.00":
-    daily_gain_color = "blue"
-else:
-    daily_gain_color = "green"
+def generate_html(data):
+    # Determine Daily Gain color
+    daily_gain = float(data["Daily Gain"].replace(",", "").strip())
+    if daily_gain > 0:
+        color = "green"
+    elif daily_gain < 0:
+        color = "red"
+    else:
+        color = "blue"
 
-# Generate HTML
-html_content = f"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEPSE Market Summary</title>
-    <style>
-        body {{ font-family: Arial, sans-serif; }}
-        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
-        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-        th {{ background-color: #f4f4f4; }}
-        .red {{ color: red; }}
-        .green {{ color: green; }}
-        .blue {{ color: blue; }}
-    </style>
-</head>
-<body>
-    <h1>NEPSE Market Summary</h1>
-    <table>
-        <tr><th>Date</th><td>{date}</td></tr>
-        <tr><th>Current</th><td>{current}</td></tr>
-        <tr><th>Daily Gain</th><td class="{daily_gain_color}">{daily_gain}</td></tr>
-        <tr><th>Total Turnover</th><td>{total_turnover}</td></tr>
-        <tr><th>Total Traded Share</th><td>{total_traded_share}</td></tr>
-        <tr><th>Total Transactions</th><td>{total_transactions}</td></tr>
-        <tr><th>Total Scrips Traded</th><td>{total_scrips_traded}</td></tr>
-        <tr><th>Total Float Market Capitalization Rs:</th><td>{float_market_cap}</td></tr>
-        <tr><th>NEPSE Market Cap</th><td>{nepse_market_cap}</td></tr>
-    </table>
-</body>
-</html>
-"""
+    # HTML Template
+    html_content = f"""
+    <html>
+    <head>
+        <title>NEPSE Market Summary</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; }}
+            .gain {{ color: {color}; }}
+        </style>
+    </head>
+    <body>
+        <h1>NEPSE Market Summary</h1>
+        <p>Date: {data['Date']}</p>
+        <p>Current: {data['Current']}</p>
+        <p class="gain">Daily Gain: {data['Daily Gain']}</p>
+        <p>Total Turnover: {data['Total Turnover']}</p>
+        <p>Total Traded Share: {data['Total Traded Share']}</p>
+        <p>Total Transactions: {data['Total Transactions']}</p>
+        <p>Total Scrips Traded: {data['Total Scrips Traded']}</p>
+        <p>Total Float Market Capitalization Rs: {data['Total Float Market Capitalization Rs']}</p>
+        <p>NEPSE Market Cap: {data['NEPSE Market Cap']}</p>
+    </body>
+    </html>
+    """
+    return html_content
 
-# Save HTML to file
-output_file = "nepse_market_summary.html"
-with open(output_file, "w", encoding="utf-8") as file:
-    file.write(html_content)
+def upload_to_ftp(html_content):
+    try:
+        with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
+            with open("nepse_summary.html", "w") as file:
+                file.write(html_content)
 
-print(f"NEPSE Market Summary saved to {output_file}")
+            with open("nepse_summary.html", "rb") as file:
+                ftp.storbinary("STOR nepse_summary.html", file)
+
+        print("File uploaded successfully.")
+    except Exception as e:
+        print("FTP upload error:", e)
+
+def update_nepse_summary():
+    data = scrape_nepse_data()
+    if data:
+        html_content = generate_html(data)
+        upload_to_ftp(html_content)
+
+# Scheduler to run the script every hour
+scheduler = BackgroundScheduler(timezone=timezone("Asia/Kathmandu"))
+scheduler.add_job(update_nepse_summary, "interval", hours=1)
+scheduler.start()
+
+if __name__ == "__main__":
+    # Run Flask server if needed (optional for testing purposes)
+    from flask import Flask
+    app = Flask(__name__)
+
+    @app.route("/")
+    def home():
+        return "<h1>NEPSE Summary Scraper Running...</h1>"
+
+    app.run(port=int(os.getenv("PORT", 5000)))
