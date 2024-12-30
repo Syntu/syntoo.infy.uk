@@ -2,7 +2,7 @@ import os
 import ftplib
 from apscheduler.schedulers.background import BackgroundScheduler
 from pytz import timezone
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -57,6 +57,35 @@ def scrape_today_share_price():
             })
     return data
 
+# Function to scrape additional Nepse data
+def scrape_nepse_additional_data():
+    url = "https://nepalipaisa.com/live-market"
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, "html.parser")
+    data = {}
+    nepse_point = soup.find("div", {"id": "nepse-point"})
+    data["Nepse Point"] = nepse_point.text.strip() if nepse_point else "N/A"
+    
+    change_point = soup.find("div", {"id": "change-point"})
+    data["Change Point"] = change_point.text.strip() if change_point else "N/A"
+    
+    change_percent = soup.find("div", {"id": "change-percent"})
+    data["Change Percent"] = change_percent.text.strip() if change_percent else "N/A"
+    
+    as_of_date = soup.find("div", {"id": "as-of-date"})
+    data["As of Date"] = as_of_date.text.strip() if as_of_date else "N/A"
+    
+    total_turnover = soup.find("div", {"id": "total-turnover"})
+    data["Total Turnover"] = total_turnover.text.strip() if total_turnover else "N/A"
+    
+    total_volume = soup.find("div", {"id": "total-volume"})
+    data["Total Volume"] = total_volume.text.strip() if total_volume else "N/A"
+    
+    total_txn = soup.find("div", {"id": "total-txn"})
+    data["Total Txn"] = total_txn.text.strip() if total_txn else "N/A"
+    
+    return data
+
 # Function to merge live and today's data
 def merge_data(live_data, today_data):
     merged = []
@@ -88,8 +117,19 @@ def merge_data(live_data, today_data):
     return merged
 
 # Function to generate HTML
-def generate_html(main_table):
+def generate_html(main_table, additional_data):
     updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
+    additional_data_html = f"""
+    <table>
+        <tr><th>Nepse Point</th><td>{additional_data.get("Nepse Point", "N/A")}</td></tr>
+        <tr><th>Change Point</th><td>{additional_data.get("Change Point", "N/A")}</td></tr>
+        <tr><th>Change Percent</th><td>{additional_data.get("Change Percent", "N/A")}</td></tr>
+        <tr><th>As of Date</th><td>{additional_data.get("As of Date", "N/A")}</td></tr>
+        <tr><th>Total Turnover</th><td>{additional_data.get("Total Turnover", "N/A")}</td></tr>
+        <tr><th>Total Volume</th><td>{additional_data.get("Total Volume", "N/A")}</td></tr>
+        <tr><th>Total Txn</th><td>{additional_data.get("Total Txn", "N/A")}</td></tr>
+    </table>
+    """
     html = f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -324,8 +364,9 @@ def generate_html(main_table):
         </script>
     </head>
     <body>
+        <div style="text-align: center; font-size: 12px; margin-top: 10px;">Welcome to my website</div>
         <h1>NEPSE Live Data</h1>
-        <h2>Welcome ðŸ™ to my Nepse Data website</h2>
+        {additional_data_html}
         <div class="updated-time">
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
@@ -392,8 +433,9 @@ def upload_to_ftp(html_content):
 def refresh_data():
     live_data = scrape_live_trading()
     today_data = scrape_today_share_price()
+    additional_data = scrape_nepse_additional_data()
     merged_data = merge_data(live_data, today_data)
-    html_content = generate_html(merged_data)
+    html_content = generate_html(merged_data, additional_data)
     upload_to_ftp(html_content)
 
 # Scheduler
@@ -406,23 +448,3 @@ def schedule_jobs():
     day_of_week = now.weekday()  # Monday is 0 and Sunday is 6
 
     # Check if the current day is Sunday to Thursday and time is between 11:00 and 15:00
-    if day_of_week in range(5) and time(11, 0) <= current_time <= time(15, 0):
-        scheduler.add_job(refresh_data, "interval", minutes=5)
-    else:
-        # Schedule a job to run once at 15:00 to refresh data outside the trading hours
-        next_run_time = datetime.combine(now.date(), time(15, 0))
-        if now.time() > time(15, 0):
-            next_run_time = next_run_time + timedelta(days=1)
-        scheduler.add_job(refresh_data, "date", run_date=next_run_time)
-
-# Initial scheduling
-schedule_jobs()
-
-scheduler.start()
-
-# Initial Data Refresh
-refresh_data()
-
-# Keep Running
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT)
