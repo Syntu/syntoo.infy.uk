@@ -1,3 +1,4 @@
+# Import libraries
 import os
 import ftplib
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -17,38 +18,46 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Function to scrape NEPSE Market Summary
+# Scrape NEPSE Market Summary
 def scrape_market_summary():
     url = "https://nepsealpha.com/live-market/"
     response = requests.get(url)
     soup = BeautifulSoup(response.content, "html.parser")
     summary_data = {}
-    table = soup.find("table", class_="table")
-    if table:
-        rows = table.find_all("tr")
+
+    try:
+        summary_section = soup.find("div", class_="market-summary")  # Adjust class as per website
+        rows = summary_section.find_all("div", class_="summary-row")
         for row in rows:
-            cells = row.find_all("td")
-            if len(cells) == 2:
-                key = cells[0].text.strip()
-                value = cells[1].text.strip()
-                summary_data[key] = value
+            label = row.find("div", class_="label").text.strip()
+            value = row.find("div", class_="value").text.strip()
+            summary_data[label] = value
+    except Exception as e:
+        print("Error scraping market summary:", e)
+
     return summary_data
 
-# Function to scrape Nepse Index from HamroShare
-def scrape_nepse_index():
-    url = "https://www.hamroshare.com.np/"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, "html.parser")
-    index_div = soup.find("div", class_="nepse-index")
-    nepse_index = index_div.text.strip() if index_div else "N/A"
-    return nepse_index
+# Generate HTML for Market Summary
+def generate_market_summary_html(summary_data):
+    html = '<div class="market-summary">'
+    for key, value in summary_data.items():
+        color = "blue"  # Default color
+        if "Daily Gain" in key:
+            value_num = float(value.replace(",", "").replace("%", ""))
+            if value_num > 0:
+                color = "green"
+            elif value_num < 0:
+                color = "red"
 
-# (Remaining scraping functions unchanged...)
+        html += f'<div class="summary-row" style="color: {color};"><span>{key}:</span> {value}</div>'
+    html += '</div>'
+    return html
 
-# Function to generate HTML
-def generate_html(main_table, nepse_index):
+# Main HTML Generator
+def generate_html(main_table):
     updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
     market_summary = scrape_market_summary()
+    market_summary_html = generate_market_summary_html(market_summary)
 
     html = f"""
     <!DOCTYPE html>
@@ -58,82 +67,68 @@ def generate_html(main_table, nepse_index):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>NEPSE Live Data</title>
         <style>
-            /* Styles are unchanged */
+            body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; }}
+            h1 {{ text-align: center; font-size: 40px; margin-top: 20px; }}
+            .updated-time, .market-summary, .search-container {{ text-align: center; margin: 10px 0; }}
+            .summary-row {{ margin-bottom: 5px; }}
+            .table-container {{ margin: 0 auto; width: 95%; overflow-x: auto; }}
+            table {{ width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: center; }}
+            th {{ background-color: #8B4513; color: white; cursor: pointer; }}
+            .light-red {{ background-color: #FFCCCB; }}
+            .light-green {{ background-color: #D4EDDA; }}
+            .light-blue {{ background-color: #CCE5FF; }}
         </style>
-        <script>
-            /* JavaScript code is unchanged */
-        </script>
     </head>
     <body>
         <h1>NEPSE Live Data</h1>
-        <h2>Welcome 🙏 to my Nepse Data website</h2>
-        <div class="updated-time">
-            <div class="left">Updated on: {updated_time}</div>
-            <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
-        </div>
-
-        <div class="nepse-index">
-            <strong>NEPSE Index:</strong> {nepse_index}
-        </div>
-
-        <div class="summary-container">
-            <h2>NEPSE Market Summary</h2>
-            <table>
-                <tr><th>Metric</th><th>Value</th></tr>
-                <tr><td>Date</td><td>{market_summary.get("Date", "N/A")}</td></tr>
-                <tr><td>Current</td><td>{market_summary.get("Current", "N/A")}</td></tr>
-                <tr><td>Daily Gain</td><td>{market_summary.get("Daily Gain", "N/A")}</td></tr>
-                <tr><td>Total Turnover</td><td>{market_summary.get("Total Turnover", "N/A")}</td></tr>
-                <tr><td>Total Traded Share</td><td>{market_summary.get("Total Traded Share", "N/A")}</td></tr>
-                <tr><td>Total Transactions</td><td>{market_summary.get("Total Transactions", "N/A")}</td></tr>
-                <tr><td>Total Scrips Traded</td><td>{market_summary.get("Total Scrips Traded", "N/A")}</td></tr>
-            </table>
-        </div>
-
+        <div class="updated-time">Updated on: {updated_time}</div>
+        {market_summary_html}
         <div class="search-container">
-            <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search for symbols...">
+            <input type="text" id="searchInput" placeholder="Search for symbols...">
         </div>
-
         <div class="table-container">
-            <table id="nepseTable">
+            <table>
                 <thead>
                     <tr>
-                        <!-- Table headers are unchanged -->
+                        <th>SN</th><th>Symbol</th><th>LTP</th><th>Change%</th>
+                        <th>Day High</th><th>Day Low</th><th>Volume</th>
                     </tr>
                 </thead>
                 <tbody>
     """
     for row in main_table:
-        # Row generation remains unchanged
-        pass
+        html += f"""
+            <tr>
+                <td>{row["SN"]}</td><td>{row["Symbol"]}</td><td>{row["LTP"]}</td>
+                <td>{row["Change%"]}</td><td>{row["Day High"]}</td><td>{row["Day Low"]}</td>
+                <td>{row["Volume"]}</td>
+            </tr>
+        """
     html += """
-        </tbody>
-        </table>
-    </div>
+                </tbody>
+            </table>
+        </div>
     </body>
     </html>
     """
     return html
 
-# (Remaining functions unchanged...)
-
-# Refresh Data
+# Upload to FTP and Scheduler
 def refresh_data():
-    nepse_index = scrape_nepse_index()
-    live_data = scrape_live_trading()
-    today_data = scrape_today_share_price()
-    merged_data = merge_data(live_data, today_data)
-    html_content = generate_html(merged_data, nepse_index)
-    upload_to_ftp(html_content)
+    live_data = scrape_live_trading()  # Assuming function exists
+    html_content = generate_html(live_data)
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(html_content)
+    with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
+        ftp.cwd("/htdocs")
+        with open("index.html", "rb") as f:
+            ftp.storbinary("STOR index.html", f)
 
-# Scheduler
 scheduler = BackgroundScheduler()
 scheduler.add_job(refresh_data, "interval", minutes=15)
 scheduler.start()
 
-# Initial Data Refresh
-refresh_data()
-
-# Keep Running
 if __name__ == "__main__":
+    refresh_data()
     app.run(host="0.0.0.0", port=PORT)
