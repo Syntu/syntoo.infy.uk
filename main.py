@@ -1,474 +1,78 @@
-import os
-import ftplib
-from apscheduler.schedulers.background import BackgroundScheduler
-from pytz import timezone
-from datetime import datetime, time, timedelta
 import requests
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
-from flask import Flask
+from datetime import datetime
 
-app = Flask(__name__)
+# Website URL
+url = "https://nepsealpha.com/live-market/"
 
-# Load environment variables
-load_dotenv()
-FTP_HOST = os.getenv("FTP_HOST")
-FTP_USER = os.getenv("FTP_USER")
-FTP_PASS = os.getenv("FTP_PASS")
-PORT = int(os.getenv("PORT", 5000))
+# Send request and parse data
+response = requests.get(url)
+soup = BeautifulSoup(response.content, 'html.parser')
 
-# Function to scrape live trading data
-def scrape_live_trading():
-    url = "https://www.sharesansar.com/live-trading"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, "html.parser")
-    rows = soup.find_all("tr")
-    data = []
-    for row in rows:
-        cells = row.find_all("td")
-        if len(cells) > 1:
-            data.append({
-                "Symbol": cells[1].text.strip(),
-                "LTP": cells[2].text.strip().replace(",", ""),
-                "Change%": cells[4].text.strip(),
-                "Day High": cells[6].text.strip().replace(",", ""),
-                "Day Low": cells[7].text.strip().replace(",", ""),
-                "Previous Close": cells[9].text.strip().replace(",", ""),
-                "Volume": cells[8].text.strip().replace(",", "")
-            })
-    return data
+# Function to get text or default
+def get_text_or_default(element, default="N/A"):
+    return element.text.strip() if element else default
 
-# Function to scrape today's share price summary
-def scrape_today_share_price():
-    url = "https://www.sharesansar.com/today-share-price"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, "html.parser")
-    rows = soup.find_all("tr")
-    data = []
-    for row in rows:
-        cells = row.find_all("td")
-        if len(cells) > 1:
-            data.append({
-                "SN": cells[0].text.strip(),
-                "Symbol": cells[1].text.strip(),
-                "Turnover": cells[10].text.strip().replace(",", ""),
-                "52 Week High": cells[19].text.strip().replace(",", ""),
-                "52 Week Low": cells[20].text.strip().replace(",", "")
-            })
-    return data
+# Extract data
+market_summary = soup.find('div', {'class': 'market-summary'})
 
-# Function to scrape Nepse summary
-def scrape_nepse_summary():
-    url = "https://nepalipaisa.com/live-market"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, "html.parser")
-    
-    try:
-        nepse_point = soup.find("span", {"id": "nepse-point"}).text.strip()
-        change_point = soup.find("span", {"id": "change-point"}).text.strip()
-        change_percent = soup.find("span", {"id": "change-percent"}).text.strip()
-        as_of_date = soup.find("span", {"id": "as-of-date"}).text.strip()
-        total_turnover = soup.find("span", {"id": "total-turnover"}).text.strip()
-        total_volume = soup.find("span", {"id": "total-volume"}).text.strip()
-        total_txn = soup.find("span", {"id": "total-txn"}).text.strip()
-    except AttributeError:
-        return None
-    
-    return {
-        "nepse_point": nepse_point,
-        "change_point": change_point,
-        "change_percent": change_percent,
-        "as_of_date": as_of_date,
-        "total_turnover": total_turnover,
-        "total_volume": total_volume,
-        "total_txn": total_txn
-    }
+# Parse individual data points
+date = datetime.now().strftime('%Y-%m-%d')
+current = get_text_or_default(market_summary.find('span', {'class': 'current-index'}))
+daily_gain = get_text_or_default(market_summary.find('span', {'class': 'daily-gain'}))
+total_turnover = get_text_or_default(market_summary.find('span', {'id': 'total-turnover'}))
+total_traded_share = get_text_or_default(market_summary.find('span', {'id': 'total-traded-share'}))
+total_transactions = get_text_or_default(market_summary.find('span', {'id': 'total-transactions'}))
+total_scrips_traded = get_text_or_default(market_summary.find('span', {'id': 'total-scrips-traded'}))
+float_market_cap = get_text_or_default(market_summary.find('span', {'id': 'float-market-cap'}))
+nepse_market_cap = get_text_or_default(market_summary.find('span', {'id': 'nepse-market-cap'}))
 
-# Function to merge live and today's data
-def merge_data(live_data, today_data):
-    merged = []
-    today_dict = {item["Symbol"]: item for item in today_data}
-    for live in live_data:
-        symbol = live["Symbol"]
-        if symbol in today_dict:
-            today = today_dict[symbol]
-            high = today["52 Week High"]
-            low = today["52 Week Low"]
-            ltp = live["LTP"]
-            down_from_high = (float(high) - float(ltp)) / float(high) * 100 if high != "N/A" and ltp != "N/A" else "N/A"
-            up_from_low = (float(ltp) - float(low)) / float(low) * 100 if low != "N/A" and ltp != "N/A" else "N/A"
-            merged.append({
-                "SN": today["SN"],
-                "Symbol": symbol,
-                "LTP": live["LTP"],
-                "Change%": live["Change%"],
-                "Day High": live["Day High"],
-                "Day Low": live["Day Low"],
-                "Previous Close": live["Previous Close"],
-                "Volume": live["Volume"],
-                "Turnover": today["Turnover"],
-                "52 Week High": today["52 Week High"],
-                "52 Week Low": today["52 Week Low"],
-                "Down From High (%)": f"{down_from_high:.2f}" if isinstance(down_from_high, float) else "N/A",
-                "Up From Low (%)": f"{up_from_low:.2f}" if isinstance(up_from_low, float) else "N/A"
-            })
-    return merged
+# Determine daily gain color
+if daily_gain.startswith('-'):
+    daily_gain_color = "red"
+elif daily_gain == "0" or daily_gain == "0.00":
+    daily_gain_color = "blue"
+else:
+    daily_gain_color = "green"
 
-# Function to generate HTML
-def generate_html(main_table, summary_data):
-    updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
-    summary_table = ""
-    if summary_data:
-        summary_table = f"""
-        <table>
-            <tr><th>Nepse Point</th><td>{summary_data['nepse_point']}</td></tr>
-            <tr><th>Change Point</th><td>{summary_data['change_point']}</td></tr>
-            <tr><th>Change Percent</th><td>{summary_data['change_percent']}</td></tr>
-            <tr><th>As of Date</th><td>{summary_data['as_of_date']}</td></tr>
-            <tr><th>Total Turnover</th><td>{summary_data['total_turnover']}</td></tr>
-            <tr><th>Total Volume</th><td>{summary_data['total_volume']}</td></tr>
-            <tr><th>Total Txn</th><td>{summary_data['total_txn']}</td></tr>
-        </table>
-        """
-    
-    html = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>NEPSE Live Data</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; }}
-            h1 {{
-                text-align: center;
-                font-size: 40px;
-                font-weight: bold;
-                margin-top: 20px;
-            }}
-            h2 {{
-                text-align: center;
-                font-size: 14px;
-                margin-bottom: 20px;
-            }}
-            .small-font {{
-                font-size: 12px;
-                text-align: center;
-                margin-top: 10px;
-            }}
-            .table-container {{
-                margin: 0 auto;
-                width: 95%;
-                overflow-x: auto;
-                overflow-y: auto;
-                height: 600px; /* Adjust as needed */
-            }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 20px;
-                font-size: 14px;
-            }}
-            th, td {{
-                border: 1px solid #ddd;
-                padding: 8px;
-                text-align: center;
-            }}
-            th {{
-                background-color: #8B4513;
-                color: white;
-                position: sticky;
-                top: 0;
-                z-index: 2;
-                cursor: pointer;
-                white-space: nowrap;
-            }}
-            th.arrow::after {{
-                content: '\\25B2'; /* Up arrow */
-                float: right;
-                margin-left: 5px;
-            }}
-            th.arrow.desc::after {{
-                content: '\\25BC'; /* Down arrow */
-            }}
-            tr:nth-child(even) {{
-                background-color: #f9f9f9;
-            }}
-            .light-red {{
-                background-color: #FFCCCB;
-            }}
-            .light-green {{
-                background-color: #D4EDDA;
-            }}
-            .light-blue {{
-                background-color: #CCE5FF;
-            }}
-            .highlight {{
-                background-color: yellow !important;
-            }}
-            th.symbol {{
-                position: -webkit-sticky;
-                position: sticky;
-                left: 0;
-                z-index: 3;
-                background-color: #8B4513; /* Match the header background color */
-            }}
-            td.symbol {{
-                position: -webkit-sticky;
-                position: sticky;
-                left: 0;
-                z-index: 1;
-                background-color: inherit;
-            }}
-            .footer {{
-                text-align: right;
-                padding: 10px;
-                font-size: 12px;
-                color: gray;
-            }}
-            .footer a {{
-                color: inherit;
-                text-decoration: none;
-            }}
-            .updated-time {{
-                font-size: 14px;
-                margin-top: 10px;
-            }}
-            .left {{
-                float: left;
-            }}
-            .right {{
-                float: right;
-            }}
-            .search-container {{
-                text-align: center;
-                margin-bottom: 10px;
-            }}
-            .search-container input {{
-                width: 200px;
-                padding: 5px;
-                font-size: 14px;
-                margin-bottom: 10px;
-            }}
-            @media (max-width: 768px) {{
-                table {{
-                    font-size: 12px;
-                }}
-                th, td {{
-                    padding: 5px;
-                }}
-            }}
-            @media (max-width: 480px) {{
-                table {{
-                    font-size: 10px;
-                }}
-                th, td {{
-                    padding: 3px;
-                }}
-            }}
-        </style>
-        <script>
-            function sortTable(n) {{
-                var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-                table = document.getElementById("nepseTable");
-                switching = true;
-                dir = "asc";
-                var headers = table.getElementsByTagName("TH");
-                for (var j = 0; j < headers.length; j++) {{
-                    headers[j].classList.remove("arrow", "desc");
-                }}
-                headers[n].classList.add("arrow");
-                while (switching) {{
-                    switching = false;
-                    rows = table.rows;
-                    for (i = 1; i < (rows.length - 1); i++) {{
-                        shouldSwitch = false;
-                        x = rows[i].getElementsByTagName("TD")[n];
-                        y = rows[i + 1].getElementsByTagName("TD")[n];
-                        let xValue = parseFloat(x.innerHTML.replace(/,/g, ''));
-                        let yValue = parseFloat(y.innerHTML.replace(/,/g, ''));
-                        if (isNaN(xValue)) xValue = x.innerHTML.toLowerCase();
-                        if (isNaN(yValue)) yValue = y.innerHTML.toLowerCase();
-                        if (dir === "asc") {{
-                            if (xValue > yValue) {{
-                                shouldSwitch = true;
-                                break;
-                            }}
-                        }} else if (dir === "desc") {{
-                            if (xValue < yValue) {{
-                                shouldSwitch = true;
-                                break;
-                            }}
-                        }}
-                    }}
-                    if (shouldSwitch) {{
-                        rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-                        switching = true;
-                        switchcount++;
-                    }} else {{
-                        if (switchcount === 0 && dir === "asc") {{
-                            dir = "desc";
-                            headers[n].classList.add("desc");
-                            switching = true;
-                        }}
-                    }}
-                }}
-            }}
+# Generate HTML
+html_content = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEPSE Market Summary</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+        th {{ background-color: #f4f4f4; }}
+        .red {{ color: red; }}
+        .green {{ color: green; }}
+        .blue {{ color: blue; }}
+    </style>
+</head>
+<body>
+    <h1>NEPSE Market Summary</h1>
+    <table>
+        <tr><th>Date</th><td>{date}</td></tr>
+        <tr><th>Current</th><td>{current}</td></tr>
+        <tr><th>Daily Gain</th><td class="{daily_gain_color}">{daily_gain}</td></tr>
+        <tr><th>Total Turnover</th><td>{total_turnover}</td></tr>
+        <tr><th>Total Traded Share</th><td>{total_traded_share}</td></tr>
+        <tr><th>Total Transactions</th><td>{total_transactions}</td></tr>
+        <tr><th>Total Scrips Traded</th><td>{total_scrips_traded}</td></tr>
+        <tr><th>Total Float Market Capitalization Rs:</th><td>{float_market_cap}</td></tr>
+        <tr><th>NEPSE Market Cap</th><td>{nepse_market_cap}</td></tr>
+    </table>
+</body>
+</html>
+"""
 
-            // Function to highlight a row when a symbol is clicked
-            function highlightRow(row) {{
-                var rows = document.getElementById("nepseTable").rows;
-                for (var i = 1; i < rows.length; i++) {{
-                    rows[i].classList.remove("highlight");
-                }}
-                row.classList.add("highlight");
-            }}
+# Save HTML to file
+output_file = "nepse_market_summary.html"
+with open(output_file, "w", encoding="utf-8") as file:
+    file.write(html_content)
 
-            // Function to filter table rows based on search input
-            function filterTable() {{
-                var input, filter, table, tr, td, i, txtValue;
-                input = document.getElementById("searchInput");
-                filter = input.value.toUpperCase();
-                table = document.getElementById("nepseTable");
-                tr = table.getElementsByTagName("tr");
-                for (i = 1; i < tr.length; i++) {{
-                    td = tr[i].getElementsByTagName("td")[1];
-                    if (td) {{
-                        txtValue = td.textContent || td.innerText;
-                        if (txtValue.toUpperCase().indexOf(filter) > -1) {{
-                            tr[i].style.display = "";
-                        }} else {{
-                            tr[i].style.display = "none";
-                        }}
-                    }}
-                }}
-            }}
-
-            // Function to change background color of Symbol column based on Change%
-            function updateSymbolColors() {{
-                var table = document.getElementById("nepseTable");
-                var rows = table.getElementsByTagName("tr");
-                for (var i = 1; i < rows.length; i++) {{
-                    var changeCell = rows[i].getElementsByTagName("td")[3];
-                    var symbolCell = rows[i].getElementsByTagName("td")[1];
-                    if (changeCell) {{
-                        var changeValue = parseFloat(changeCell.innerText);
-                        if (changeValue < 0) {{
-                            symbolCell.style.backgroundColor = "#FFCCCB"; // Light red
-                        }} else if (changeValue > 0) {{
-                            symbolCell.style.backgroundColor = "#D4EDDA"; // Light green
-                        }} else {{
-                            symbolCell.style.backgroundColor = "#CCE5FF"; // Light blue
-                        }}
-                    }}
-                }}
-            }}
-
-            window.onload = function() {{
-                updateSymbolColors();
-            }};
-        </script>
-    </head>
-    <body>
-        <div class="small-font">Welcome to my website</div>
-        <h1>NEPSE Live Data</h1>
-        {summary_table}
-        <div class="updated-time">
-            <div class="left">Updated on: {updated_time}</div>
-            <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
-        </div>
-
-        <div class="search-container">
-            <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search for symbols...">
-        </div>
-
-        <div class="table-container">
-            <table id="nepseTable">
-                <thead>
-                    <tr>
-                        <th>SN</th>
-                        <th class="symbol" onclick="sortTable(1)">Symbol</th>
-                        <th onclick="sortTable(2)">LTP</th>
-                        <th onclick="sortTable(3)">Change%</th>
-                        <th onclick="sortTable(4)">Day High</th>
-                        <th onclick="sortTable(5)">Day Low</th>
-                        <th onclick="sortTable(6)">Previous Close</th>
-                        <th onclick="sortTable(7)">Volume</th>
-                        <th onclick="sortTable(8)">Turnover</th>
-                        <th onclick="sortTable(9)">52 Week High</th>
-                        <th onclick="sortTable(10)">52 Week Low</th>
-                        <th onclick="sortTable(11)">Down From High (%)</th>
-                        <th onclick="sortTable(12)">Up From Low (%)</th>
-                    </tr>
-                </thead>
-                <tbody>
-    """
-    for row in main_table:
-        change_class = "light-red" if float(row["Change%"]) < 0 else (
-            "light-green" if float(row["Change%"]) > 0 else "light-blue")
-        html += f"""
-            <tr onclick="highlightRow(this)">
-                <td>{row["SN"]}</td><td class="symbol {change_class}">{row["Symbol"]}</td><td>{row["LTP"]}</td>
-                <td class="{change_class}">{row["Change%"]}</td><td>{row["Day High"]}</td>
-                <td>{row["Day Low"]}</td><td>{row["Previous Close"]}</td>
-                <td>{row["Volume"]}</td><td>{row["Turnover"]}</td>
-                <td>{row["52 Week High"]}</td><td>{row["52 Week Low"]}</td>
-                <td>{row["Down From High (%)"]}</td><td>{row["Up From Low (%)"]}</td>
-            </tr>
-        """
-    html += """
-        </tbody>
-        </table>
-    </div>
-
-    </body>
-    </html>
-    """
-    return html
-
-# Upload to FTP
-def upload_to_ftp(html_content):
-    with open("index.html", "w", encoding="utf-8") as f:
-        f.write(html_content)
-    with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
-        ftp.cwd("/htdocs")
-        with open("index.html", "rb") as f:
-            ftp.storbinary("STOR index.html", f)
-
-# Refresh Data
-def refresh_data():
-    live_data = scrape_live_trading()
-    today_data = scrape_today_share_price()
-    summary_data = scrape_nepse_summary()
-    merged_data = merge_data(live_data, today_data)
-    html_content = generate_html(merged_data, summary_data)
-    upload_to_ftp(html_content)
-
-# Scheduler
-scheduler = BackgroundScheduler()
-
-# Define the refresh interval
-def schedule_jobs():
-    now = datetime.now(timezone("Asia/Kathmandu"))
-    current_time = now.time()
-    day_of_week = now.weekday()  # Monday is 0 and Sunday is 6
-
-    # Check if the current day is Sunday to Thursday and time is between 11:00 and 15:00
-    if day_of_week in range(5) and time(11, 0) <= current_time <= time(15, 0):
-        scheduler.add_job(refresh_data, "interval", minutes=5)
-    else:
-        # Schedule a job to run once at 15:00 to refresh data outside the trading hours
-        next_run_time = datetime.combine(now.date(), time(15, 0))
-        if now.time() > time(15, 0):
-            next_run_time = next_run_time + timedelta(days=1)
-        scheduler.add_job(refresh_data, "date", run_date=next_run_time)
-
-# Initial scheduling
-schedule_jobs()
-
-scheduler.start()
-
-# Initial Data Refresh
-refresh_data()
-
-# Keep Running
+print(f"NEPSE Market Summary saved to {output_file}")
