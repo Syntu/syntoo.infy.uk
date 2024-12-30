@@ -1,4 +1,3 @@
-# Import libraries
 import os
 import ftplib
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -18,106 +17,137 @@ FTP_USER = os.getenv("FTP_USER")
 FTP_PASS = os.getenv("FTP_PASS")
 PORT = int(os.getenv("PORT", 5000))
 
-# Scrape NEPSE Market Summary
-def scrape_market_summary():
-    url = "https://nepsealpha.com/live-market/"
+# Function to scrape live trading data
+def scrape_live_trading():
+    url = "https://www.sharesansar.com/live-trading"
     response = requests.get(url)
     soup = BeautifulSoup(response.content, "html.parser")
-    summary_data = {}
+    rows = soup.find_all("tr")
+    data = []
+    for row in rows:
+        cells = row.find_all("td")
+        if len(cells) > 1:
+            data.append({
+                "Symbol": cells[1].text.strip(),
+                "LTP": cells[2].text.strip().replace(",", ""),
+                "Change%": cells[4].text.strip(),
+                "Day High": cells[6].text.strip().replace(",", ""),
+                "Day Low": cells[7].text.strip().replace(",", ""),
+                "Previous Close": cells[9].text.strip().replace(",", ""),
+                "Volume": cells[8].text.strip().replace(",", "")
+            })
+    return data
 
-    try:
-        summary_section = soup.find("div", class_="market-summary")  # Adjust class as per website
-        rows = summary_section.find_all("div", class_="summary-row")
-        for row in rows:
-            label = row.find("div", class_="label").text.strip()
-            value = row.find("div", class_="value").text.strip()
-            summary_data[label] = value
-    except Exception as e:
-        print("Error scraping market summary:", e)
+# Function to scrape today's share price summary
+def scrape_today_share_price():
+    url = "https://www.sharesansar.com/today-share-price"
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, "html.parser")
+    rows = soup.find_all("tr")
+    data = []
+    for row in rows:
+        cells = row.find_all("td")
+        if len(cells) > 1:
+            data.append({
+                "SN": cells[0].text.strip(),
+                "Symbol": cells[1].text.strip(),
+                "Turnover": cells[10].text.strip().replace(",", ""),
+                "52 Week High": cells[19].text.strip().replace(",", ""),
+                "52 Week Low": cells[20].text.strip().replace(",", "")
+            })
+    return data
 
-    return summary_data
+# Function to merge live and today's data
+def merge_data(live_data, today_data):
+    merged = []
+    today_dict = {item["Symbol"]: item for item in today_data}
+    for live in live_data:
+        symbol = live["Symbol"]
+        if symbol in today_dict:
+            today = today_dict[symbol]
+            high = today["52 Week High"]
+            low = today["52 Week Low"]
+            ltp = live["LTP"]
+            down_from_high = (float(high) - float(ltp)) / float(high) * 100 if high != "N/A" and ltp != "N/A" else "N/A"
+            up_from_low = (float(ltp) - float(low)) / float(low) * 100 if low != "N/A" and ltp != "N/A" else "N/A"
+            merged.append({
+                "SN": today["SN"],
+                "Symbol": symbol,
+                "LTP": live["LTP"],
+                "Change%": live["Change%"],
+                "Day High": live["Day High"],
+                "Day Low": live["Day Low"],
+                "Previous Close": live["Previous Close"],
+                "Volume": live["Volume"],
+                "Turnover": today["Turnover"],
+                "52 Week High": today["52 Week High"],
+                "52 Week Low": today["52 Week Low"],
+                "Down From High (%)": f"{down_from_high:.2f}" if isinstance(down_from_high, float) else "N/A",
+                "Up From Low (%)": f"{up_from_low:.2f}" if isinstance(up_from_low, float) else "N/A"
+            })
+    return merged
 
-# Generate HTML for Market Summary
-def generate_market_summary_html(summary_data):
-    html = '<div class="market-summary">'
-    for key, value in summary_data.items():
-        color = "blue"  # Default color
-        if "Daily Gain" in key:
-            value_num = float(value.replace(",", "").replace("%", ""))
-            if value_num > 0:
-                color = "green"
-            elif value_num < 0:
-                color = "red"
-
-        html += f'<div class="summary-row" style="color: {color};"><span>{key}:</span> {value}</div>'
-    html += '</div>'
-    return html
-
-# Main HTML Generator
+# Function to generate HTML
 def generate_html(main_table):
     updated_time = datetime.now(timezone("Asia/Kathmandu")).strftime("%Y-%m-%d %H:%M:%S")
-    market_summary = scrape_market_summary()
-    market_summary_html = generate_market_summary_html(market_summary)
-
-    html = f"""
-    <!DOCTYPE html>
+    html = f"""<!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>NEPSE Live Data</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; }}
-            h1 {{ text-align: center; font-size: 40px; margin-top: 20px; }}
-            .updated-time, .market-summary, .search-container {{ text-align: center; margin: 10px 0; }}
-            .summary-row {{ margin-bottom: 5px; }}
-            .table-container {{ margin: 0 auto; width: 95%; overflow-x: auto; }}
-            table {{ width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; }}
-            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: center; }}
-            th {{ background-color: #8B4513; color: white; cursor: pointer; }}
-            .light-red {{ background-color: #FFCCCB; }}
-            .light-green {{ background-color: #D4EDDA; }}
-            .light-blue {{ background-color: #CCE5FF; }}
-        </style>
     </head>
     <body>
         <h1>NEPSE Live Data</h1>
-        <div class="updated-time">Updated on: {updated_time}</div>
-        {market_summary_html}
-        <div class="search-container">
-            <input type="text" id="searchInput" placeholder="Search for symbols...">
-        </div>
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>SN</th><th>Symbol</th><th>LTP</th><th>Change%</th>
-                        <th>Day High</th><th>Day Low</th><th>Volume</th>
-                    </tr>
-                </thead>
-                <tbody>
+        <p>Updated on: {updated_time}</p>
+        <table border="1">
+            <thead>
+                <tr>
+                    <th>SN</th>
+                    <th>Symbol</th>
+                    <th>LTP</th>
+                    <th>Change%</th>
+                    <th>Day High</th>
+                    <th>Day Low</th>
+                    <th>Previous Close</th>
+                    <th>Volume</th>
+                    <th>Turnover</th>
+                    <th>52 Week High</th>
+                    <th>52 Week Low</th>
+                    <th>Down From High (%)</th>
+                    <th>Up From Low (%)</th>
+                </tr>
+            </thead>
+            <tbody>
     """
     for row in main_table:
         html += f"""
             <tr>
-                <td>{row["SN"]}</td><td>{row["Symbol"]}</td><td>{row["LTP"]}</td>
-                <td>{row["Change%"]}</td><td>{row["Day High"]}</td><td>{row["Day Low"]}</td>
+                <td>{row["SN"]}</td>
+                <td>{row["Symbol"]}</td>
+                <td>{row["LTP"]}</td>
+                <td>{row["Change%"]}</td>
+                <td>{row["Day High"]}</td>
+                <td>{row["Day Low"]}</td>
+                <td>{row["Previous Close"]}</td>
                 <td>{row["Volume"]}</td>
+                <td>{row["Turnover"]}</td>
+                <td>{row["52 Week High"]}</td>
+                <td>{row["52 Week Low"]}</td>
+                <td>{row["Down From High (%)"]}</td>
+                <td>{row["Up From Low (%)"]}</td>
             </tr>
         """
     html += """
-                </tbody>
-            </table>
-        </div>
+            </tbody>
+        </table>
     </body>
     </html>
     """
     return html
 
-# Upload to FTP and Scheduler
-def refresh_data():
-    live_data = scrape_live_trading()  # Assuming function exists
-    html_content = generate_html(live_data)
+# Upload to FTP
+def upload_to_ftp(html_content):
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(html_content)
     with ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS) as ftp:
@@ -125,10 +155,22 @@ def refresh_data():
         with open("index.html", "rb") as f:
             ftp.storbinary("STOR index.html", f)
 
+# Refresh Data
+def refresh_data():
+    live_data = scrape_live_trading()
+    today_data = scrape_today_share_price()
+    merged_data = merge_data(live_data, today_data)
+    html_content = generate_html(merged_data)
+    upload_to_ftp(html_content)
+
+# Scheduler
 scheduler = BackgroundScheduler()
 scheduler.add_job(refresh_data, "interval", minutes=15)
 scheduler.start()
 
+# Initial Data Refresh
+refresh_data()
+
+# Keep Running
 if __name__ == "__main__":
-    refresh_data()
     app.run(host="0.0.0.0", port=PORT)
