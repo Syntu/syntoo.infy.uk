@@ -324,8 +324,8 @@ def generate_html(main_table):
         </script>
     </head>
     <body>
-        <h1>NEPSE Live Data</h1>
-        <h2>Welcome ðŸ™ to my Nepse Data website</h2>
+        <h1>NEPSE Data Table</h1>
+        <h2>Welcome to Syntoo's Nepse Stock Data</h2>
         <div class="updated-time">
             <div class="left">Updated on: {updated_time}</div>
             <div class="right">Developed By: <a href="https://www.facebook.com/srajghimire">Syntoo</a></div>
