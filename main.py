@@ -152,9 +152,7 @@ def refresh_data():
         print("Failed to retrieve data for refreshing.")
 
 # Scheduler
-scheduler = BackgroundScheduler()
-trigger = CronTrigger(day_of_week='sun-thu', hour='11-15', minute='*/5', timezone='Asia/Kathmandu')
-scheduler.add_job(refresh_data, trigger)
+scheduler.add_job(refresh_data, CronTrigger(hour="11-15", minute="*/5", timezone="Asia/Kathmandu"))
 scheduler.start()
 
 # Initial Data Refresh
