@@ -51,9 +51,9 @@ def scrape_today_share_price():
             data.append({
                 "SN": cells[0].text.strip(),
                 "Symbol": cells[1].text.strip(),
-                "Turnover": cells[10].text.strip().replace(",", ""),
-                "52 Week High": cells[19].text.strip().replace(",", ""),
-                "52 Week Low": cells[20].text.strip().replace(",", "")
+                "Turnover": cells[13].text.strip().replace(",", ""),
+                "52 Week High": cells[22].text.strip().replace(",", ""),
+                "52 Week Low": cells[23].text.strip().replace(",", "")
             })
     return data
 
